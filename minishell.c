@@ -60,7 +60,7 @@ void sigtstp_handler(int signal)
 pid_t *create_pids_vector(pid_t pid, int N)
 {
     int i;
-    int **pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n-1 pids
+    int **pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n pids
 
     return pids_vector;
 }
@@ -98,6 +98,7 @@ int main()
     int j;
 
     char input[1024];
+    printf("msh> ");
     fgets(input, sizeof(input), stdin);
 
     // Verificar si la entrada está vacía
@@ -108,12 +109,12 @@ int main()
     }
 
     // Eliminar espacios y saltos de línea al final de la entrada
-    size_t len = strlen(input);
-    while (len > 0 && (input[len - 1] == ' ' || input[len - 1] == '\n'))
-    {
-        input[len - 1] = '\0'; // Elimino el caracter
-        len--;
-    }
+    // size_t len = strlen(input);
+    // while (len > 0 && (input[len - 1] == ' ' || input[len - 1] == '\n'))
+    // {
+    //     input[len - 1] = '\0'; // Elimino el caracter
+    //     len--;
+    // }
     // esto creo q no es necesario lo de la funcion porq lo hace directamente la libreria creo 
     //tline *line = tokenize_input(input);
     tline *line = tokenize(input); 
@@ -144,6 +145,7 @@ int main()
         if (pid < 0){
             fprintf(stderr, "Error al crear proceso hijo \n");
         } else if (pid == 0) {
+            printf("Hola soy el proceso hijo %d \n", i);
             
             if (i == 0){                                    // primer mandato
                 
@@ -168,10 +170,10 @@ int main()
             }
             printf("Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
             execvp(line->commands[i].filename, line->commands[i].argv);
-            printf("ERROR AL EJECUTAR EL COMANDO");
+            printf("ERROR AL EJECUTAR EL COMANDO %d \n", i);
 
         } else {
-            
+            printf("Hola soy el padre");
             *pids_vector[i] = pid;                  // nos guardamos el pid del hijo en su posición
             
         }
