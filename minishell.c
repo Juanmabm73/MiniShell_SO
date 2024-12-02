@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 #define MAX_COMMANDS 20
 
@@ -19,16 +20,14 @@
 int child_number; // hacemos como en relevos y la i
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGINT
-void sigint_handler(int signal)
-{
+void sigint_handler(int signal){
     write(STDOUT_FILENO, "\n", 1); // establecemos una nueva línea
     printf("msh > ");              // imprimimos el prompt de la minishell
     fflush(stdout);                // limpia el buffer de salida
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
-void sigtstp_handler(int signal)
-{ // lo que tenemos que conseguir es que al hacer CTRL + Z la minishell no se pare
+void sigtstp_handler(int signal) { // lo que tenemos que conseguir es que al hacer CTRL + Z la minishell no se pare
     printf("\n");
     printf("Suspender procesos en primer plano no esta implementado\n");
     printf("msh > ");
@@ -57,33 +56,29 @@ void sigtstp_handler(int signal)
 // }
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
-pid_t *create_pids_vector(pid_t pid, int N)
-{
-    int i;
+pid_t *create_pids_vector(int N) {
     int **pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n pids
-
+    printf("Array de pids creado correctamente \n");
     return pids_vector;
 }
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIPES
-int **create_pipes_vector(int N)
-{
+int **create_pipes_vector(int N) {
     int i;
     int **pipes_vector;
     pipes_vector = (int **)malloc((N - 1) * sizeof(int)); // reservamos memoria para N-1 mandatos
 
     // dentro de cada hueco para la pipe reservamos memoria para sus dos descriptores
-    for (i = 0; i < N - 1; i++)
-    {
+    for (i = 0; i < N - 1; i++){
         pipes_vector[i] = (int *)malloc(2 * sizeof(int));
     }
 
     // creamos las pipes
-    for (i = 0; i < N; i++)
-    {
+    for (i = 0; i < N-1; i++){
         pipe(pipes_vector[i]);
     }
 
+    printf("Pipes creadas con exito \n");
     return pipes_vector;
 }
 
@@ -119,11 +114,12 @@ int main()
     //tline *line = tokenize_input(input);
     tline *line = tokenize(input); 
     int N = line->ncommands;
+    printf("Numero de comandos: %d \n", N);
 
     //-----------------------------------------------------------------------------
 
     pid_t pid;
-    int **pids_vector = create_pids_vector(pid, N); // puntero al vector de pids
+    int **pids_vector = create_pids_vector(N); // puntero al vector de pids
     int **pipes_vector = create_pipes_vector(N);
 
     // ------------------------------------------------------------------------------
@@ -141,6 +137,7 @@ int main()
                 close(pipes_vector[j][1]);                  // cerrar extremos de escritura
             }
         }
+        printf("Todo cerrado correctamente");
 
         if (pid < 0){
             fprintf(stderr, "Error al crear proceso hijo \n");
@@ -148,16 +145,20 @@ int main()
             printf("Hola soy el proceso hijo %d \n", i);
             
             if (i == 0){                                    // primer mandato
-                
-                dup2(pipes_vector[0][1], STDOUT_FILENO);    // redirigimos su salida al extremo de escritura [1] de la primera pipe
+                printf("ESTOY DENTRO \n");
+                if (dup2(pipes_vector[0][1], STDOUT_FILENO) == -1){    // redirigimos su salida al extremo de escritura [1] de la primera pipe
+                    printf("Se ha producido un error %s", errno);
+                } else {
+                    printf("Redirección completada \n");
+                }
                 
             } else if ( i == N-1){                          // ultimo mandato
                 
                 dup2(pipes_vector[i-1][0], STDIN_FILENO);
-                
+                printf("Redirección completada \n");
                 
             } else {                                        // mandato intermedio
-                /* 
+            /* 
 
             [0]         [1]         [2]         [3]         [4]         [5]         [6]         [7]
                 =======     =======     =======     =======     =======     =======     =======    
@@ -166,6 +167,7 @@ int main()
             */
                 dup2(pipes_vector[i-1][0], STDIN_FILENO);
                 dup2(pipes_vector[i][1], STDOUT_FILENO);
+                printf("Redirección completada \n");
 
             }
             printf("Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
