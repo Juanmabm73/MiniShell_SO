@@ -3,6 +3,9 @@
 #include <unistd.h>
 #include "parser.h"
 #include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/wait.h>
 
 #define MAX_COMMANDS 20
 
@@ -54,7 +57,7 @@ void sigtstp_handler(int signal)
 // }
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
-int *create_pids_vector(pid_t pid, int N)
+pid_t *create_pids_vector(pid_t pid, int N)
 {
     int i;
     int **pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n-1 pids
@@ -63,7 +66,7 @@ int *create_pids_vector(pid_t pid, int N)
 }
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIPES
-int *create_pipes_vector(int N)
+int **create_pipes_vector(int N)
 {
     int i;
     int **pipes_vector;
@@ -84,15 +87,16 @@ int *create_pipes_vector(int N)
     return pipes_vector;
 }
 
-int j;
 
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
-int main(int argc, char const *argv[])
+int main()
 {
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
 
     int i;
+    int j;
+
     char input[1024];
     fgets(input, sizeof(input), stdin);
 
@@ -128,24 +132,27 @@ int main(int argc, char const *argv[])
     for (i = 0; i < N; i++){
         child_number = i;                                   // guardamos el id del hijo para tenerlo identificado despues de este for
         pid = fork();
+
+        for (j = 0; j < N-1; j++){
+            if (j != i-1){
+                close(pipes_vector[i][0]);                  // cerrar extremos de lectura
+            } else if (j != i){   
+                close(pipes_vector[j][1]);                  // cerrar extremos de escritura
+            }
+        }
+
         if (pid < 0){
             fprintf(stderr, "Error al crear proceso hijo \n");
         } else if (pid == 0) {
             
             if (i == 0){                                    // primer mandato
-                close(pipes_vector[0][0]); 
+                
                 dup2(pipes_vector[0][1], STDOUT_FILENO);    // redirigimos su salida al extremo de escritura [1] de la primera pipe
-                for ( j = 1; j < N-1; j++){                 // cerramos todos los descriptores de las pipes siguientes a la que usa
-                    close(pipes_vector[j][0]);
-                    close(pipes_vector[j][1]);
-                }
+                
             } else if ( i == N-1){                          // ultimo mandato
-                close(pipes_vector[i-1][1]);
+                
                 dup2(pipes_vector[i-1][0], STDIN_FILENO);
-                for ( j = i; j > 0; j--){
-                    close(pipes_vector[j-2][0]);
-                    close(pipes_vector[j-2][1]);
-                }
+                
                 
             } else {                                        // mandato intermedio
                 /* 
@@ -155,29 +162,17 @@ int main(int argc, char const *argv[])
                     0           1           2           3           4           5           6
 
             */
-                close(pipes_vector[i-1][1]);                // de la pipe anterior cierras el extremo de escritura es decir el 1
-                close(pipes_vector[i][0]);                  // de la pipe siguiente cierras el de lectura el 0
                 dup2(pipes_vector[i-1][0], STDIN_FILENO);
                 dup2(pipes_vector[i][1], STDOUT_FILENO);
 
-                // cerramos las pipes que no utilizamos hasta el inicio
-                for ( j = i; j >= 0 ; j--){
-                    close(pipes_vector[j-2][1]);            // cerramos las pipes que no usa 
-                    close(pipes_vector[j-2][0]); 
-                }
-
-                // cerramos las pipes que no utilizamos hasta el final
-                for (j = i; i < N; j++){
-                    close(pipes_vector[j+2][1]);
-                    close(pipes_vector[j+2][0]);
-                }
             }
             printf("Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
             execvp(line->commands[i].filename, line->commands[i].argv);
+            printf("ERROR AL EJECUTAR EL COMANDO");
 
         } else {
-
-             *pids_vector[i] = pid;                  // nos guardamos el pid del hijo en su posición
+            
+            *pids_vector[i] = pid;                  // nos guardamos el pid del hijo en su posición
             
         }
         
@@ -196,6 +191,13 @@ int main(int argc, char const *argv[])
     
 
     // pendiente hacer free de las pipes y sus descriptores
+
+    // Liberar memoria al final
+    for (i = 0; i < N - 1; i++) {
+        free(pipes_vector[i]);
+    }
+    free(pipes_vector);
+    free(pids_vector);
     return 0;
 }
 
