@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 #define MAX_COMMANDS 20
 
@@ -32,7 +33,7 @@ void sigtstp_handler(int signal)
 int **create_pids_vector(int N)
 {
     int **pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n pids
-
+    printf("Array de pids creado correctamente \n");
     return pids_vector;
 }
 
@@ -55,6 +56,7 @@ int **create_pipes_vector(int N)
         pipe(pipes_vector[i]);
     }
 
+    printf("Pipes creadas con exito \n");
     return pipes_vector;
 }
 
@@ -80,6 +82,7 @@ int main()
 
     tline *line = tokenize(input);
     int N = line->ncommands;
+    printf("Numero de comandos: %d \n", N);
 
     //-----------------------------------------------------------------------------
 
