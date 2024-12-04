@@ -13,7 +13,7 @@
 int child_number; // hacemos como en relevos y la i
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGINT
-void sigint_handler(int signal)
+void sigint_handler()
 {
     write(STDOUT_FILENO, "\n", 1); // establecemos una nueva línea
     printf("msh > ");              // imprimimos el prompt de la minishell
@@ -21,7 +21,7 @@ void sigint_handler(int signal)
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
-void sigtstp_handler(int signal)
+void sigtstp_handler()
 { // lo que tenemos que conseguir es que al hacer CTRL + Z la minishell no se pare
     printf("\n");
     printf("Suspender procesos en primer plano no esta implementado\n");
@@ -34,6 +34,7 @@ int *create_pids_vector(int N)
 {
     int *pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n pids
     printf("Array de pids creado correctamente \n");
+    fflush(stdout);
     return pids_vector;
 }
 
@@ -48,38 +49,110 @@ int **create_pipes_vector(int N)
     for (i = 0; i < N - 1; i++)
     {
         pipes_vector[i] = (int *)malloc(2 * sizeof(int));
-        if (!pipes_vector[i]) {
+        if (!pipes_vector[i])
+        {
             fprintf(stderr, "Error al reservar memoria en las pipes");
+            exit(1);
         }
     }
 
     // creamos las pipes
     for (i = 0; i < N - 1; i++)
     {
-        
-        if (pipe(pipes_vector[i]) == -1){
-            printf("Error al crear la pipe %d \n", i);
+        if (pipe(pipes_vector[i]) == -1)
+        {
+            perror("Error al crear la pipe");
+            exit(1);
         }
         printf("Pipe %d creada correctamente \n", i);
-        
+        fflush(stdout);
     }
-    
+
     printf("Pipes creadas con exito \n");
+    fflush(stdout);
     return pipes_vector;
+}
+
+// ---------------------------------------------------------------------------------CERRAR DESCRIPTORES
+void close_descriptors(int N, int i, int **pipes_vector)
+{
+    int j;
+    for (j = 0; j < N - 1; j++)
+    {
+        if (j != i - 1)
+        { // No cerrar el extremo de lectura de la pipe anterior
+            printf("Cerrando pipe %d, extremo 0 \n", j);
+            fflush(stdout);
+            if (close(pipes_vector[j][0]) == -1)
+            {
+                perror("Error al cerrar descriptor de lectura de pipe");
+                exit(1);
+            }
+        }
+        if (j != i)
+        { // No cerrar el extremo de escritura de la pipe actual
+            printf("Cerrando pipe %d, extremo 1 \n", j);
+            fflush(stdout);
+            if (close(pipes_vector[j][1]) == -1)
+            {
+                perror("Error al cerrar descriptor de escritura de pipe");
+                exit(1);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------REDIRIGIR DESCRIPTORES
+void redirect_pipes(int N, int i, int **pipes_vector)
+{
+    if (i == 0)
+    {
+        printf("Proceso hijo %d: Redirigiendo salida al pipe\n", i);
+        fflush(stdout); // primer mandato
+        if (dup2(pipes_vector[i][1], STDOUT_FILENO) == -1)
+        { // redirigimos su salida al extremo de escritura [1] de la primera pipe
+            perror("Error en dup2 (proceso 0)");
+            exit(1);
+        }
+    }
+    else if (i == N - 1)
+    { // ultimo mandato
+        printf("Proceso hijo %d: Redirigiendo entrada del pipe\n", i);
+        fflush(stdout);
+        if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1)
+        {
+            perror("Error en dup2 (último mandato)");
+            exit(1);
+        }
+    }
+    else
+    { // mandato intermedio
+        printf("Proceso hijo %d: Redirigiendo entrada y salida del pipe\n", i);
+        fflush(stdout);
+        if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1)
+        {
+            perror("Error en dup2 (mandato intermedio, entrada)");
+            exit(1);
+        }
+        if (dup2(pipes_vector[i][1], STDOUT_FILENO) == -1)
+        {
+            perror("Error en dup2 (mandato intermedio, salida)");
+            exit(1);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
 {
-    
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
 
     int i;
-    int j;
 
     char input[1024];
     printf("msh> ");
+    fflush(stdout);
     fgets(input, sizeof(input), stdin);
 
     // Verificar si la entrada está vacía
@@ -91,23 +164,22 @@ int main()
 
     tline *line = tokenize(input);
     int N = line->ncommands;
-    
-    for ( i = 0; i < N; i++)
+
+    for (i = 0; i < N; i++)
     {
         printf("Comandos: %s \n", line->commands[i].filename);
+        fflush(stdout);
     }
-    
-    
 
     //-----------------------------------------------------------------------------
 
     pid_t pid;
-    int *pids_vector = create_pids_vector(N); // puntero al vector de pids
-    int **pipes_vector;
-    if (N > 1) {
+    pid_t *pids_vector = create_pids_vector(N); // puntero al vector de pids
+    int **pipes_vector = NULL;
+    if (N > 1)
+    {
         pipes_vector = create_pipes_vector(N);
     }
-    
 
     // ------------------------------------------------------------------------------
 
@@ -118,95 +190,48 @@ int main()
         child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
         pid = fork();
 
-
         // comprobamos si se ha creado bien el proceso hijo
         if (pid < 0)
         {
             fprintf(stderr, "Error al crear proceso hijo \n");
+            exit(1);
         }
         else if (pid == 0) // si es el hijo
         {
             printf("Hola soy el proceso hijo %d \n", i);
+            fflush(stdout);
 
-            
-            if (N > 1){
-
-
+            if (N > 1)
+            {
                 // cerramos los descriptores de los pipes que no vamos a usar
-                for (j = 0; j < N - 1; j++) {
-                    if (j != i - 1) { // No cerrar el extremo de lectura de la pipe anterior
-                        printf("Cerrando pipe %d, extremo 0 \n", j);
-                        if (close(pipes_vector[j][0]) == -1) {
-                            perror("Error al cerrar descriptor de lectura de pipe");
-                            exit(1);
-                        }
-                    }
-                    if (j != i) { // No cerrar el extremo de escritura de la pipe actual
-                        printf("Cerrando pipe %d, extremo 1 \n", j);
-                        if (close(pipes_vector[j][1]) == -1) {
-                            perror("Error al cerrar descriptor de escritura de pipe");
-                            exit(1);
-                        }
-                    }
-                }
-
+                close_descriptors(N, i, pipes_vector);
 
                 // funcion redirigir
-                if (i == 0){         
-                    printf("Proceso hijo %d: Redirigiendo salida al pipe\n", i);
-                    fflush(stdout);                                   // primer mandato
-                    if (dup2(pipes_vector[i][1], STDOUT_FILENO) == -1) { // redirigimos su salida al extremo de escritura [1] de la primera pipe
-                        perror("Error en dup2 (proceso 0) \n");
-                        exit(1);
-                    } else {
-                        fprintf(stderr,"TODO OK \n");
-                        fflush(stdout);
-                    }
-                }
-                else if (i == N - 1 ){ // ultimo mandato
-                    fflush(stdout);
-                    printf("Proceso hijo %d: Redirigiendo entrada del pipe\n", i);
-                    fflush(stdout);
-                    if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1) {
-                        perror("Error en dup2 (último mandato) \n");
-                        exit(1);
-                    } else {
-                        printf("TODO OK \n");
-                        fflush(stdout);
-                    }
-                }
-                else{ // mandato intermedio
-                    /*
+                redirect_pipes(N, i, pipes_vector);
+            }
 
-                [0]         [1]         [2]         [3]         [4]         [5]         [6]         [7]
-                    =======     =======     =======     =======     =======     =======     =======
-                        0           1           2           3           4           5           6
-
-                */
-                    dup2(pipes_vector[i - 1][0], STDIN_FILENO);
-                    dup2(pipes_vector[i][1], STDOUT_FILENO);
-                }
-            } 
-
-            fprintf(stderr, "La i es:%d \n", i);
-            
             fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
-
+            fflush(stdout);
             execvp(line->commands[i].filename, line->commands[i].argv);
-            printf("ERROR AL EJECUTAR EL COMANDO %d \n", i);
+            perror("ERROR AL EJECUTAR EL COMANDO");
+            exit(1);
         }
         else
         {
-            fprintf(stderr,"Hola soy el padre \n");
+            printf("Hola soy el padre\n");
+            fflush(stdout);
             pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
         }
     }
 
     // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
-    for (i = 0; i < N-1; i++)
+    if (N > 1)
     {
-        close(pipes_vector[i][0]);
-        close(pipes_vector[i][1]);
+        for (i = 0; i < N - 1; i++)
+        {
+            close(pipes_vector[i][0]);
+            close(pipes_vector[i][1]);
+        }
     }
 
     // como buen padre espera a todos sus hijos
@@ -215,16 +240,15 @@ int main()
         wait(NULL);
     }
 
-    // pendiente hacer free de las pipes y sus descriptores
-
-    // Liberar memoria de pipes
-    for (i = 0; i < N - 1; i++)
+    // Liberar memoria al final
+    if (N > 1)
     {
-        free(pipes_vector[i]);
+        for (i = 0; i < N - 1; i++)
+        {
+            free(pipes_vector[i]);
+        }
+        free(pipes_vector);
     }
-    free(pipes_vector);
-
-   
     free(pids_vector);
     return 0;
 }
