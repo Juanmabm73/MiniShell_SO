@@ -153,21 +153,26 @@ int main()
 
                 // funcion redirigir
                 if (i == 0){         
-                    fflush(stdout);                                   // primer mandato
                     printf("Proceso hijo %d: Redirigiendo salida al pipe\n", i);
-                    if (dup2(pipes_vector[0][1], STDOUT_FILENO) == -1) { // redirigimos su salida al extremo de escritura [1] de la primera pipe
+                    fflush(stdout);                                   // primer mandato
+                    if (dup2(pipes_vector[i][1], STDOUT_FILENO) == -1) { // redirigimos su salida al extremo de escritura [1] de la primera pipe
                         perror("Error en dup2 (proceso 0) \n");
                         exit(1);
                     } else {
-                        printf("TODO OK");
+                        fprintf(stderr,"TODO OK \n");
+                        fflush(stdout);
                     }
                 }
                 else if (i == N - 1 ){ // ultimo mandato
                     fflush(stdout);
                     printf("Proceso hijo %d: Redirigiendo entrada del pipe\n", i);
+                    fflush(stdout);
                     if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1) {
                         perror("Error en dup2 (último mandato) \n");
                         exit(1);
+                    } else {
+                        printf("TODO OK \n");
+                        fflush(stdout);
                     }
                 }
                 else{ // mandato intermedio
@@ -178,20 +183,21 @@ int main()
                         0           1           2           3           4           5           6
 
                 */
-                    fflush(stdout);
                     dup2(pipes_vector[i - 1][0], STDIN_FILENO);
                     dup2(pipes_vector[i][1], STDOUT_FILENO);
                 }
             } 
 
-            printf("La i es:%d \n", i);
-            printf("Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
+            fprintf(stderr, "La i es:%d \n", i);
+            
+            fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
+
             execvp(line->commands[i].filename, line->commands[i].argv);
             printf("ERROR AL EJECUTAR EL COMANDO %d \n", i);
         }
         else
         {
-            printf("Hola soy el padre \n");
+            fprintf(stderr,"Hola soy el padre \n");
             pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
         }
     }
