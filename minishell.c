@@ -11,13 +11,14 @@
 #define MAX_COMMANDS 20
 
 int child_number; // hacemos como en relevos y la i
+char prompt[1024] = "msh> ";
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGINT
 void sigint_handler()
 {
-    write(STDOUT_FILENO, "\n", 1); // establecemos una nueva línea
-    printf("msh > ");              // imprimimos el prompt de la minishell
-    fflush(stdout);                // limpia el buffer de salida
+    write(STDOUT_FILENO, "\n", 1);      // establecemos una nueva línea
+    printf("%s",prompt);                // imprimimos el prompt de la minishell
+    fflush(stdout);                     // limpia el buffer de salida
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
@@ -25,7 +26,7 @@ void sigtstp_handler()
 { // lo que tenemos que conseguir es que al hacer CTRL + Z la minishell no se pare
     printf("\n");
     printf("Suspender procesos en primer plano no esta implementado\n");
-    printf("msh > ");
+    printf("%s",prompt);
     fflush(stdout);
 }
 
@@ -142,6 +143,28 @@ void redirect_pipes(int N, int i, int **pipes_vector)
     }
 }
 
+void execute_cd_command(char * rute){
+    if (rute == NULL){
+        rute = getenv("HOME");
+        if (rute == NULL){
+            fprintf(stderr, "No se ha podido encontrar el directorio HOME");
+        }
+    }
+
+    if (chdir(rute) == -1){
+        perror("cd error: ");
+    } else {
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd)) != NULL){
+            setenv("PWD", cwd, 1);                      // actualizamos el valor de PWD
+            snprintf(prompt, sizeof(prompt), "msh:%s", cwd);
+        } else {
+            perror("getcwd error: ");
+        }
+    }
+}
+
+
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
 {
@@ -150,105 +173,145 @@ int main()
 
     int i;
 
+
     char input[1024];
-    printf("msh> ");
+    printf("%s",prompt);
     fflush(stdout);
-    fgets(input, sizeof(input), stdin);
-
-    // Verificar si la entrada está vacía
-    if (input[0] == '\n')
+    while (fgets(input, sizeof(input), stdin) != NULL)
     {
-        printf("Entrada vacía. Saliendo...\n");
-        return 0;
-    }
-
-    tline *line = tokenize(input);
-    int N = line->ncommands;
-
-    for (i = 0; i < N; i++)
-    {
-        printf("Comandos: %s \n", line->commands[i].filename);
-        fflush(stdout);
-    }
-
-    //-----------------------------------------------------------------------------
-
-    pid_t pid;
-    pid_t *pids_vector = create_pids_vector(N); // puntero al vector de pids
-    int **pipes_vector = NULL;
-    if (N > 1)
-    {
-        pipes_vector = create_pipes_vector(N);
-    }
-
-    // ------------------------------------------------------------------------------
-
-    // CREACION DE PROCESOS HIJOS Y LA DE DIOS
-
-    for (i = 0; i < N; i++)
-    {
-        child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
-        pid = fork();
-
-        // comprobamos si se ha creado bien el proceso hijo
-        if (pid < 0)
+        
+        // Verificar si la entrada está vacía
+        if (input[0] == '\n')
         {
-            fprintf(stderr, "Error al crear proceso hijo \n");
-            exit(1);
+            printf("Entrada vacía. Saliendo...\n");
+            return 0;
         }
-        else if (pid == 0) // si es el hijo
-        {
-            printf("Hola soy el proceso hijo %d \n", i);
-            fflush(stdout);
 
-            if (N > 1)
+        if (strncmp(input, "cd", 2) == 0) {
+            char *token;
+            // Tokenizar la cadena por espacios
+            token = strtok(input, " ");  // El primer token será "cd"
+            token = strtok(NULL, " ");   // El siguiente token debería ser el directorio
+
+            // Verificamos el número de tokens obtenidos
+            if (token != NULL) {
+                // Si hay un segundo token, pasamos a la función execute_cd_command
+                // Verificar si hay más de dos partes
+                if (strtok(NULL, " ") != NULL) {
+                    printf("Error: El comando 'cd' solo acepta un argumento.\n");
+                } else {
+                    // Llamamos a la función para cambiar al directorio
+                    execute_cd_command(token);
+                }
+            } else {
+                // Si no hay un segundo token, usamos el directorio HOME por defecto
+                printf("No se especificó directorio, se cambiará al directorio HOME.\n");
+                execute_cd_command(getenv("HOME"));
+            }
+        } else {
+
+            tline *line = tokenize(input);
+            int N = line->ncommands;
+
+            
+
+            for (i = 0; i < N; i++)
             {
-                // cerramos los descriptores de los pipes que no vamos a usar
-                close_descriptors(N, i, pipes_vector);
-
-                // funcion redirigir
-                redirect_pipes(N, i, pipes_vector);
+                printf("Comandos: %s \n", line->commands[i].filename);
+                fflush(stdout);
             }
 
-            fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
-            fflush(stdout);
-            execvp(line->commands[i].filename, line->commands[i].argv);
-            perror("ERROR AL EJECUTAR EL COMANDO");
-            exit(1);
-        }
-        else
-        {
-            printf("Hola soy el padre\n");
-            fflush(stdout);
-            pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
-        }
-    }
+        
 
-    // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
-    if (N > 1)
-    {
-        for (i = 0; i < N - 1; i++)
-        {
-            close(pipes_vector[i][0]);
-            close(pipes_vector[i][1]);
-        }
-    }
+            //-----------------------------------------------------------------------------
 
-    // como buen padre espera a todos sus hijos
-    for (i = 0; i < N; i++)
-    {
-        wait(NULL);
-    }
+            pid_t pid;
+            pid_t *pids_vector = create_pids_vector(N); // puntero al vector de pids
+            int **pipes_vector = NULL;
+            if (N > 1)
+            {
+                pipes_vector = create_pipes_vector(N);
+            }
 
-    // Liberar memoria al final
-    if (N > 1)
-    {
-        for (i = 0; i < N - 1; i++)
-        {
-            free(pipes_vector[i]);
+            // ------------------------------------------------------------------------------
+
+            // CREACION DE PROCESOS HIJOS Y LA DE DIOS
+
+            for (i = 0; i < N; i++)
+            {
+                child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
+                pid = fork();
+
+                // comprobamos si se ha creado bien el proceso hijo
+                if (pid < 0)
+                {
+                    fprintf(stderr, "Error al crear proceso hijo \n");
+                    exit(1);
+                }
+                else if (pid == 0) // si es el hijo
+                {
+                    printf("Hola soy el proceso hijo %d \n", i);
+                    fflush(stdout);
+
+                    if (N > 1)
+                    {
+                        // cerramos los descriptores de los pipes que no vamos a usar
+                        close_descriptors(N, i, pipes_vector);
+
+                        // funcion redirigir
+                        redirect_pipes(N, i, pipes_vector);
+                    }
+
+                    
+
+                        fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
+                        fflush(stdout);
+                        execvp(line->commands[i].filename, line->commands[i].argv);
+                        perror("ERROR AL EJECUTAR EL COMANDO");
+                        exit(1);
+                    
+                }
+                else
+                {
+                    printf("Hola soy el padre\n");
+                    fflush(stdout);
+                    pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
+                }
+            }
+
+            // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
+            if (N > 1)
+            {
+                for (i = 0; i < N - 1; i++)
+                {
+                    close(pipes_vector[i][0]);
+                    close(pipes_vector[i][1]);
+                }
+            }
+
+            // como buen padre espera a todos sus hijos
+            for (i = 0; i < N; i++)
+            {
+                wait(NULL);
+            }
+
+            // Liberar memoria al final
+            if (N > 1)
+            {
+                for (i = 0; i < N - 1; i++)
+                {
+                    free(pipes_vector[i]);
+                }
+                free(pipes_vector);
+            }
+            free(pids_vector);
         }
-        free(pipes_vector);
+        printf("%s", prompt);
+        fflush;
     }
-    free(pids_vector);
+    
+    
+
+
     return 0;
 }
