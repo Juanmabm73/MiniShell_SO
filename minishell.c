@@ -316,36 +316,33 @@ void umask_function(char input[1024])
     // Verificamos el número de tokens obtenidos
     if (token != NULL)
     {
-        // Si hay un segundo token, pasamos a la función execute_umask_command
-        // Verificar si hay más de dos partes
+        // verificamos si hay mas de una opcion
         if (strtok(NULL, " ") != NULL)
         {
             printf("Error: El comando 'umask' solo acepta un argumento.\n");
         }
         else
         {
-            // Llamamos a la función para cambiar el modo de la máscara
+            mode_t new_mask; // almacena la nueva máscara de permisos
 
-            mode_t new_mask;
-            if (token == NULL)
+            if (token == NULL) // no se proporciona nueva máscara
             {
-                // Si no se proporciona un modo, imprimimos la máscara actual
-                mode_t current_mask = umask(0);
-                umask(current_mask); // Restaurar la máscara anterior
-                printf("Máscara actual: %04o\n", current_mask);
+                // imprimimos la máscara actual
+                mode_t current_mask = umask(0); // establecemos máscara actual a 0
+                umask(current_mask);            // Restauramos la máscara anterior
             }
             else
             {
                 // Convertir el modo de cadena a número
-                new_mask = strtol(token, NULL, 8);
-                if (new_mask == 0 && errno == EINVAL)
+                new_mask = strtol(token, NULL, 8);    // convertimos la nueva máscara a octal
+                if (new_mask == 0 && errno == EINVAL) // si hay error en la conversión
                 {
                     perror("Error al convertir el modo");
                 }
                 else
                 {
-                    umask(new_mask);
-                    printf("Nueva máscara establecida: %04o\n", new_mask);
+                    umask(new_mask);                                       // nueva máscara de permisos
+                    printf("Nueva máscara establecida: %04o\n", new_mask); // Imprimimos la nueva máscara en formato octal
                 }
             }
         }
