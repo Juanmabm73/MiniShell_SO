@@ -236,7 +236,6 @@ void execute_commands(char input[1024])
         // ------------------------------------------------------------------------------
 
         // CREACION DE PROCESOS HIJOS Y LA DE DIOS
-        int i;
         for (i = 0; i < N; i++)
         {
             child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
@@ -286,10 +285,16 @@ void execute_commands(char input[1024])
             }
         }
 
-        // como buen padre espera a todos sus hijos
-        for (i = 0; i < N; i++)
+        // si el comando se ejecuta en primer plano
+        int len = strlen(input);
+        if (input[len - 2] != '&')
         {
-            wait(NULL);
+            printf("Esperando a los hijos\n");
+            fflush(stdout);
+            for (i = 0; i < N; i++)
+            {
+                waitpid(pids_vector[i], NULL, 0);
+            }
         }
 
         // Liberar memoria al final
