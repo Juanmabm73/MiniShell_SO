@@ -147,6 +147,11 @@ void redirect_pipes(int N, int i, int **pipes_vector)
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO CD
 void execute_cd_command(char *rute)
 {
+    
+    printf("La ruta que llega a cd es: %s \n", rute);
+    fflush(stdout);
+    
+
     if (rute == NULL)
     {
         rute = getenv("HOME");
@@ -156,15 +161,18 @@ void execute_cd_command(char *rute)
         }
     }
 
+
     if (chdir(rute) == -1)
     {
-        perror("cd error: ");
+        fprintf(stdout, "No entra en el direcotorio:%s, %s \n",rute, strerror(errno));
     }
     else
     {
+        printf("Se ha podido redirigir al directorio \n");
         char cwd[1024];
         if (getcwd(cwd, sizeof(cwd)) != NULL)
         {
+            printf("El directorio actual es: %s \n", cwd);
             setenv("PWD", cwd, 1); // actualizamos el valor de PWD
             snprintf(prompt, sizeof(prompt), "msh:%s >", cwd);
         }
@@ -196,8 +204,11 @@ void cd_function(char input[1024])
         else
         {
             // Llamamos a la función para cambiar al directorio
+            token[strcspn(token, "\n")] = '\0';
             execute_cd_command(token);
         }
+    } else{
+        execute_cd_command(NULL);
     }
 }
 
@@ -374,6 +385,7 @@ int main()
         }
         else if (strncmp(input, "cd", 2) == 0)
         {
+            printf("Vamos a ejecutar cd con la ruta: %s", input);
             cd_function(input);
         }
         else if (strncmp(input, "exit", 4) == 0)
