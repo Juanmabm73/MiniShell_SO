@@ -10,6 +10,18 @@
 
 #define MAX_COMMANDS 20
 
+typedef struct 
+{
+    pid_t pid;                      //numero de proceso
+    int job_id;                     // numero de job (numero de lista)
+    char state[20];                 // guardamos el estado "running", "stoped", "done"
+    char command[1024];             // linea de comando que nos pasan
+} Job;
+
+Job *jobs = NULL;                   // array que nos guardará los jobs, dinámico 
+int jobs_number = 0;                // número de jobs en el array
+
+
 int child_number; // hacemos como en relevos y la i
 char prompt[1024] = "msh> ";
 
@@ -109,18 +121,19 @@ void redirect_pipes(int N, int i, int **pipes_vector)
 {
     if (i == 0)
     {
-        printf("Proceso hijo %d: Redirigiendo salida al pipe\n", i);
-        fflush(stdout); // primer mandato
+        // printf("Proceso hijo %d: Redirigiendo salida al pipe\n", i);
+        // fflush(stdout); // primer mandato
         if (dup2(pipes_vector[i][1], STDOUT_FILENO) == -1)
         { // redirigimos su salida al extremo de escritura [1] de la primera pipe
             perror("Error en dup2 (proceso 0)");
+            fflush(stdout);
             exit(1);
         }
     }
     else if (i == N - 1)
     { // ultimo mandato
-        printf("Proceso hijo %d: Redirigiendo entrada del pipe\n", i);
-        fflush(stdout);
+        // printf("Proceso hijo %d: Redirigiendo entrada del pipe\n", i);
+        // fflush(stdout);
         if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1)
         {
             perror("Error en dup2 (último mandato)");
@@ -129,8 +142,8 @@ void redirect_pipes(int N, int i, int **pipes_vector)
     }
     else
     { // mandato intermedio
-        printf("Proceso hijo %d: Redirigiendo entrada y salida del pipe\n", i);
-        fflush(stdout);
+        // printf("Proceso hijo %d: Redirigiendo entrada y salida del pipe\n", i);
+        // fflush(stdout);
         if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1)
         {
             perror("Error en dup2 (mandato intermedio, entrada)");
@@ -219,6 +232,29 @@ void exit_shell()
     exit(0);
 }
 
+
+// ---------------------------------------------------------------------------------JOBS
+void add_job(pid_t pid, char *command){
+    jobs = realloc(jobs, (jobs_number + 1) * sizeof(Job));              // reservamos memoria para un Job mas, redimensionamos el array
+                                              
+
+    // rellenamos el nuevo job
+    jobs[jobs_number].pid = pid;
+    jobs[jobs_number].job_id = jobs_number;
+    strcpy(jobs[jobs_number].state, "running");  // Estado inicial
+    strncpy(jobs[jobs_number].command, command, sizeof(jobs[jobs_number].command)); // Comando ejecutado
+    jobs_number += 1;
+
+}
+
+void show_jobs_list(){
+    int i;
+    for (i=0; i < jobs_number; i++){
+        printf("[%d] %s ---->        %s \n", jobs[i].job_id, jobs[i].state, jobs[i].command);
+    }
+
+}
+
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
 void execute_commands(char input[1024])
 {
@@ -230,7 +266,7 @@ void execute_commands(char input[1024])
 
         for (i = 0; i < N; i++)
         {
-            printf("Comandos: %s \n", line->commands[i].filename);
+            // printf("Comandos: %s \n", line->commands[i].filename);
             fflush(stdout);
         }
 
@@ -260,8 +296,8 @@ void execute_commands(char input[1024])
             }
             else if (pid == 0) // si es el hijo
             {
-                printf("Hola soy el proceso hijo %d \n", i);
-                fflush(stdout);
+                // printf("Hola soy el proceso hijo %d \n", i);
+                // fflush(stdout);
 
                 if (N > 1)
                 {
@@ -276,12 +312,13 @@ void execute_commands(char input[1024])
                 fflush(stdout);
                 execvp(line->commands[i].filename, line->commands[i].argv);
                 perror("ERROR AL EJECUTAR EL COMANDO");
+                fflush(stdout);
                 exit(1);
             }
             else
             {
-                printf("Hola soy el padre\n");
-                fflush(stdout);
+                // printf("Hola soy el padre\n");
+                // fflush(stdout);
                 pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
             }
         }
@@ -297,17 +334,22 @@ void execute_commands(char input[1024])
         }
 
         // si el comando se ejecuta en primer plano
-        int len = strlen(input);
-        if (input[len - 2] != '&')
+        if (line ->background == 0)
         {
-            printf("Esperando a los hijos\n");
+            fprintf(stderr, "Foreground, Esperando a los hijos\n");
             fflush(stdout);
             for (i = 0; i < N; i++)
             {
                 waitpid(pids_vector[i], NULL, 0);
             }
+        } else {
+            add_job(pid, line);
+            fprintf(stderr, "[%d] %d\n", jobs_number +1, pid);
+            for (i=0; i < N; i++){
+                waitpid(pids_vector[i],NULL, WNOHANG);              // esperamos pero no bloqueamos
+            }
         }
-
+        
         // Liberar memoria al final
         if (N > 1)
         {
@@ -375,6 +417,8 @@ int main()
     int i;
 
     char input[1024];
+    printf("%d \n", jobs_number);
+    fflush(stdout);
     printf("%s", prompt);
     fflush(stdout);
     while (fgets(input, sizeof(input), stdin) != NULL)
@@ -395,6 +439,8 @@ int main()
         else if (strncmp(input, "umask", 5) == 0)
         {
             umask_function(input);
+        }else if(strncmp(input, "jobs", 4) == 0){
+            show_jobs_list();
         }
         else
         {
