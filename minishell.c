@@ -308,11 +308,11 @@ void execute_commands(char input[1024])
                     redirect_pipes(N, i, pipes_vector);
                 }
 
-                // fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
-                // fflush(stdout);
+                fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
+                fflush(stderr);
                 execvp(line->commands[i].filename, line->commands[i].argv);
-                perror("ERROR AL EJECUTAR EL COMANDO");
-                fflush(stdout);
+                fprintf(stderr,"ERROR AL EJECUTAR EL COMANDO");
+                fflush(stderr);
                 exit(1);
             }
             else
@@ -344,7 +344,7 @@ void execute_commands(char input[1024])
             }
         } else {
             add_job(pid, input);
-            fprintf(stderr, "[%d] %d\n", jobs_number +1, pid);
+            fprintf(stderr, "[%d] %d\n", jobs_number-1, pid);
             for (i=0; i < N; i++){
                 waitpid(pids_vector[i],NULL, WNOHANG);              // esperamos pero no bloqueamos
             }
