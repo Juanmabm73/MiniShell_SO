@@ -15,7 +15,7 @@ typedef struct
 {
     pid_t pid;          // numero de proceso
     int job_id;         // numero de job (numero de lista)
-    char state[20];     // guardamos el estado "running", "stoped", "done"
+    char state[20];     // guardamos el estado "running", "stopped", "done"
     char command[1024]; // linea de comando que nos pasan
     pid_t *child_pids;  // array dinamico guarda todos los pids de los hijos
     int childs;         // numero de hijos
@@ -35,47 +35,34 @@ int **pipes_vector = NULL;
 // ---------------------------------------------------------------------------------MANEJADORES SEÑALES FOREGROUND
 void sigint_handler()
 {
-    int pid = getpid();
-    if (pid > 0)
-    {
-        pid_t pid_group = getpgid(pid);
-        pid_t fg_pid_group = tcgetpgrp(STDIN_FILENO);
-        fprintf(stdout, "pid_group: %d, fg_pid_group: %d\n", pid_group, fg_pid_group);
+    int i;
+    pid_t fg_pgid = tcgetpgrp(STDIN_FILENO);
 
-        if (pid_group == fg_pid_group)
+    for (i = 0; i < jobs_number; i++)
+    {
+        if (jobs[i].pid == fg_pgid)
         {
-            // en primer plano
-            fprintf(stdout, "\n%s", prompt);
-            fflush(stdout);     // Asegúrate de que el prompt se imprima inmediatamente
-            kill(pid, SIGKILL); // mata el proceso
+            kill(jobs[i].pid, SIGINT);
+            strcpy(jobs[i].state, "terminated");
         }
     }
-    else
-    {
-        fprintf(stdout, "%s", prompt);
-        fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
-    }
+    fprintf(stdout, "\n%s", prompt);
+    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
 void sigtstp_handler()
 {
-    int pid = getpid();
-    if (pid > 0)
-    {
-        pid_t pid_group = getpgid(pid);
-        pid_t fg_pid_group = tcgetpgrp(STDIN_FILENO);
+    int i;
+    pid_t fg_pgid = tcgetpgrp(STDIN_FILENO);
 
-        if (pid_group == fg_pid_group)
-        {
-            kill(pid, SIGTSTP); // envía la señal SIGTSTP para detener el proceso
-            fprintf(stdout, "\n%s", prompt);
-        }
-    }
-    else
+    for (i = 0; i < jobs_number; i++)
     {
-        fprintf(stdout, "%s", prompt);
+        kill(jobs[i].pid, SIGTSTP);
+        strcpy(jobs[i].state, "stopped");
     }
+    fprintf(stdout, "\n%s", prompt);
+    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
@@ -334,134 +321,132 @@ void revisar_bg()
 }
 
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
-void execute_commands(char input[1024])
+void execute_commands(char input[1024], pid_t pid, pid_t *pids_vector, int **pipes_vector)
 {
+
+    int liberar = 0;
+    char status[1024];
+    tline *line = tokenize(input);
+    int N = line->ncommands;
+    int i;
+    int num_childs = line->commands->argc; // numero de hijos
+
+    // for (i = 0; i < N; i++)
+    // {
+    //     printf("Comandos: %s \n", line->commands[i].filename);
+    //     fflush(stdout);
+    // }
+
+    //-----------------------------------------------------------------------------
+
+    pids_vector = create_pids_vector(N); // puntero al vector de pids
+    if (N > 1)
     {
-        int liberar = 0;
-        char status[1024];
-        tline *line = tokenize(input);
-        int N = line->ncommands;
-        int i;
-        int num_childs = line->commands->argc; // numero de hijos
+        pipes_vector = create_pipes_vector(N);
+    }
 
-        // for (i = 0; i < N; i++)
-        // {
-        //     printf("Comandos: %s \n", line->commands[i].filename);
-        //     fflush(stdout);
-        // }
+    // ------------------------------------------------------------------------------
 
-        //-----------------------------------------------------------------------------
+    // CREACION DE PROCESOS HIJOS Y LA DE DIOS
+    for (i = 0; i < N; i++)
+    {
+        child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
+        pid = fork();
 
-        pid_t pid;
-        pids_vector = create_pids_vector(N); // puntero al vector de pids
-        if (N > 1)
+        // comprobamos si se ha creado bien el proceso hijo
+        if (pid < 0)
         {
-            pipes_vector = create_pipes_vector(N);
+            fprintf(stderr, "Error al crear proceso hijo \n");
+            exit(1);
         }
-
-        // ------------------------------------------------------------------------------
-
-        // CREACION DE PROCESOS HIJOS Y LA DE DIOS
-        for (i = 0; i < N; i++)
+        else if (pid == 0) // si es el hijo
         {
-            child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
-            pid = fork();
+            // printf("Hola soy el proceso hijo %d \n", i);
+            // fflush(stdout);
 
-            // comprobamos si se ha creado bien el proceso hijo
-            if (pid < 0)
+            if (N > 1)
             {
-                fprintf(stderr, "Error al crear proceso hijo \n");
-                exit(1);
+                // cerramos los descriptores de los pipes que no vamos a usar
+                close_descriptors(N, i, pipes_vector);
+
+                // funcion redirigir
+                redirect_pipes(N, i, pipes_vector);
             }
-            else if (pid == 0) // si es el hijo
+
+            // fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
+            // fflush(stderr);
+            if (line->commands[i].filename == NULL)
             {
-                // printf("Hola soy el proceso hijo %d \n", i);
-                // fflush(stdout);
-
-                if (N > 1)
-                {
-                    // cerramos los descriptores de los pipes que no vamos a usar
-                    close_descriptors(N, i, pipes_vector);
-
-                    // funcion redirigir
-                    redirect_pipes(N, i, pipes_vector);
-                }
-
-                // fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
-                // fflush(stderr);
-                if (line->commands[i].filename == NULL)
-                {
-                    fprintf(stderr, "Error: command not found\n");
-                }
-                else
-                {
-                    execvp(line->commands[i].filename, line->commands[i].argv);
-                }
-                // fprintf(stderr,"No se ha encontrado el comando %s", line->commands[i].filename);
-                // fflush(stderr);
-                exit(1);
+                fprintf(stderr, "Error: command not found\n");
             }
             else
             {
-                // printf("Hola soy el padre\n");
-                // fflush(stdout);
-                pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
+                execvp(line->commands[i].filename, line->commands[i].argv);
             }
+            // fprintf(stderr,"No se ha encontrado el comando %s", line->commands[i].filename);
+            // fflush(stderr);
+            exit(1);
         }
+        else
+        {
+            // printf("Hola soy el padre\n");
+            // fflush(stdout);
+            pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
+        }
+    }
 
-        // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
+    // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
+    if (N > 1)
+    {
+        for (i = 0; i < N - 1; i++)
+        {
+            close(pipes_vector[i][0]);
+            close(pipes_vector[i][1]);
+        }
+    }
+
+    // si el comando se ejecuta en primer plano
+    if (line->background == 0)
+    {
+        // fprintf(stderr, "Foreground, Esperando a los hijos\n");
+        // fflush(stdout);
+        for (i = 0; i < N; i++)
+        {
+            waitpid(pids_vector[i], NULL, 0);
+        }
+    }
+    else
+    {
+        add_job(pids_vector, input, num_childs);
+        fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
+    }
+
+    // Liberar memoria al final
+    if (line->background == 0)
+    {
+
         if (N > 1)
         {
             for (i = 0; i < N - 1; i++)
             {
-                close(pipes_vector[i][0]);
-                close(pipes_vector[i][1]);
+                free(pipes_vector[i]);
             }
+            free(pipes_vector);
         }
+        free(pids_vector);
+    }
+    else
+    { // DUDA CUANDO LIBERAMOS ESTA MEMORIA
 
-        // si el comando se ejecuta en primer plano
-        if (line->background == 0)
+        if (N > 1)
         {
-            // fprintf(stderr, "Foreground, Esperando a los hijos\n");
-            // fflush(stdout);
-            for (i = 0; i < N; i++)
+            for (i = 0; i < N - 1; i++)
             {
-                waitpid(pids_vector[i], NULL, 0);
+                free(pipes_vector[i]);
             }
+            free(pipes_vector);
         }
-        else
-        {
-            add_job(pids_vector, input, num_childs);
-            fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
-        }
-
-        // Liberar memoria al final
-        if (line->background == 0)
-        {
-
-            if (N > 1)
-            {
-                for (i = 0; i < N - 1; i++)
-                {
-                    free(pipes_vector[i]);
-                }
-                free(pipes_vector);
-            }
-            free(pids_vector);
-        }
-        else
-        { // DUDA CUANDO LIBERAMOS ESTA MEMORIA
-
-            if (N > 1)
-            {
-                for (i = 0; i < N - 1; i++)
-                {
-                    free(pipes_vector[i]);
-                }
-                free(pipes_vector);
-            }
-            free(pids_vector);
-        }
+        free(pids_vector);
     }
 }
 
