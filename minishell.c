@@ -17,6 +17,8 @@ typedef struct
     int job_id;         // numero de job (numero de lista)
     char state[20];     // guardamos el estado "running", "stoped", "done"
     char command[1024]; // linea de comando que nos pasan
+    pid_t *child_pids;  // array dinamico guarda todos los pids de los hijos
+    int childs;         // numero de hijos
 } Job;
 
 Job *jobs = NULL;    // array que nos guardará los jobs, dinámico
@@ -55,6 +57,7 @@ void sigint_handler()
     }
 }
 
+// ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
 void sigtstp_handler()
 {
     int pid = getpid();
@@ -75,7 +78,6 @@ void sigtstp_handler()
     }
 }
 
-// ----------------------FUNCIONES COMPLEMENTARIAS----------------------
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
 int *create_pids_vector(int N)
 {
@@ -111,12 +113,12 @@ int **create_pipes_vector(int N)
             perror("Error al crear la pipe");
             exit(1);
         }
-        printf("Pipe %d creada correctamente \n", i);
-        fflush(stdout);
+        // printf("Pipe %d creada correctamente \n", i);
+        // fflush(stdout);
     }
 
-    printf("Pipes creadas con exito \n");
-    fflush(stdout);
+    // printf("Pipes creadas con exito \n");
+    // fflush(stdout);
     return pipes_vector;
 }
 
@@ -128,8 +130,8 @@ void close_descriptors(int N, int i, int **pipes_vector)
     {
         if (j != i - 1)
         { // No cerrar el extremo de lectura de la pipe anterior
-            printf("Cerrando pipe %d, extremo 0 \n", j);
-            fflush(stdout);
+            // printf("Cerrando pipe %d, extremo 0 \n", j);
+            // fflush(stdout);
             if (close(pipes_vector[j][0]) == -1)
             {
                 perror("Error al cerrar descriptor de lectura de pipe");
@@ -138,8 +140,8 @@ void close_descriptors(int N, int i, int **pipes_vector)
         }
         if (j != i)
         { // No cerrar el extremo de escritura de la pipe actual
-            printf("Cerrando pipe %d, extremo 1 \n", j);
-            fflush(stdout);
+            // printf("Cerrando pipe %d, extremo 1 \n", j);
+            // fflush(stdout);
             if (close(pipes_vector[j][1]) == -1)
             {
                 perror("Error al cerrar descriptor de escritura de pipe");
@@ -266,15 +268,23 @@ void exit_shell()
 }
 
 // ---------------------------------------------------------------------------------JOBS
-void add_job(pid_t pid, char *command)
+void add_job(pid_t *pids_vector, char *command, int num_childs)
 {
+    int i;
     jobs = realloc(jobs, (jobs_number + 1) * sizeof(Job)); // reservamos memoria para un Job mas, redimensionamos el array
 
     // rellenamos el nuevo job
-    jobs[jobs_number].pid = pid;
+    jobs[jobs_number].pid = pids_vector[0];
     jobs[jobs_number].job_id = jobs_number;
     strcpy(jobs[jobs_number].state, "running");                                     // Estado inicial
     strncpy(jobs[jobs_number].command, command, sizeof(jobs[jobs_number].command)); // Comando ejecutado
+    jobs[jobs_number].child_pids = realloc(jobs[jobs_number].child_pids, (num_childs * sizeof(pid_t)));
+    for (i = 0; i < num_childs; i++)
+    {
+        jobs[jobs_number].child_pids[i] = pids_vector[i]; // rellenamos los pids de para cada hijo de la linea
+    }
+    jobs[jobs_number].childs = num_childs;
+
     jobs_number += 1;
 }
 
@@ -287,101 +297,170 @@ void show_jobs_list()
     }
 }
 
-// ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
-void execute_commands(char input[1024], pid_t pid, pid_t *pids_vector, int **pipes_vector)
+void revisar_bg()
 {
-
-    tline *line = tokenize(input);
-    int N = line->ncommands;
     int i;
+    int liberar = 0; // si se queda en 0 han acabado todos
+    int n = jobs_number;
+    int j;
+    int k; // numero de procesos dentro de cada job
+    char status[1024];
+    pid_t result;
 
-    for (i = 0; i < N; i++)
-    {
-        // printf("Comandos: %s \n", line->commands[i].filename);
-        fflush(stdout);
-    }
-
-    //-----------------------------------------------------------------------------
-
-    pid_t pid;
-    pids_vector = create_pids_vector(N); // puntero al vector de pids
-    if (N > 1)
-    {
-        pipes_vector = create_pipes_vector(N);
-    }
-
-    // ------------------------------------------------------------------------------
-
-    // CREACION DE PROCESOS HIJOS Y LA DE DIOS
-    for (i = 0; i < N; i++)
-    {
-        child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
-        pid = fork();
-
-        // comprobamos si se ha creado bien el proceso hijo
-        if (pid < 0)
+    for (i = 0; i < n; i++)
+    { // itera en los jobs
+        if (strcmp(jobs[i].state, "Done") != 0)
         {
-            fprintf(stderr, "Error al crear proceso hijo \n");
-            exit(1);
-        }
-        else if (pid == 0) // si es el hijo
-        {
-            // printf("Hola soy el proceso hijo %d \n", i);
-            // fflush(stdout);
 
-            if (N > 1)
+            for (j = 0; j < jobs[i].childs; j++)
+            {                                                              // itera dentro del job la lista de pids
+                result = waitpid(jobs[i].child_pids[j], &status, WNOHANG); // esperamos pero no bloqueamos
+                // fprintf(stderr, "Para el proceso hijo %d con pid %d el resultados del waitpid es: %d \n", j, jobs[i].child_pids[j],result);
+                if (result == 0)
+                {
+                    liberar = 1;
+                }
+            }
+            if (!liberar)
             {
-                // cerramos los descriptores de los pipes que no vamos a usar
-                close_descriptors(N, i, pipes_vector);
+                // fprintf(stderr, "ACABADO BACK \n");
+                strcpy(jobs[i].state, "Done");
+                // printf("[%d] %s \n", jobs[i].job_id, jobs[i].state);
+                fflush;
+                // tendriamos que ir a liberar la memoria del proceso
+            }
+        }
+    }
+}
 
-                // funcion redirigir
-                redirect_pipes(N, i, pipes_vector);
+// ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
+void execute_commands(char input[1024])
+{
+    {
+        int liberar = 0;
+        char status[1024];
+        tline *line = tokenize(input);
+        int N = line->ncommands;
+        int i;
+        int num_childs = line->commands->argc; // numero de hijos
+
+        // for (i = 0; i < N; i++)
+        // {
+        //     printf("Comandos: %s \n", line->commands[i].filename);
+        //     fflush(stdout);
+        // }
+
+        //-----------------------------------------------------------------------------
+
+        pid_t pid;
+        pids_vector = create_pids_vector(N); // puntero al vector de pids
+        if (N > 1)
+        {
+            pipes_vector = create_pipes_vector(N);
+        }
+
+        // ------------------------------------------------------------------------------
+
+        // CREACION DE PROCESOS HIJOS Y LA DE DIOS
+        for (i = 0; i < N; i++)
+        {
+            child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
+            pid = fork();
+
+            // comprobamos si se ha creado bien el proceso hijo
+            if (pid < 0)
+            {
+                fprintf(stderr, "Error al crear proceso hijo \n");
+                exit(1);
+            }
+            else if (pid == 0) // si es el hijo
+            {
+                // printf("Hola soy el proceso hijo %d \n", i);
+                // fflush(stdout);
+
+                if (N > 1)
+                {
+                    // cerramos los descriptores de los pipes que no vamos a usar
+                    close_descriptors(N, i, pipes_vector);
+
+                    // funcion redirigir
+                    redirect_pipes(N, i, pipes_vector);
+                }
+
+                // fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
+                // fflush(stderr);
+                if (line->commands[i].filename == NULL)
+                {
+                    fprintf(stderr, "Error: command not found\n");
+                }
+                else
+                {
+                    execvp(line->commands[i].filename, line->commands[i].argv);
+                }
+                // fprintf(stderr,"No se ha encontrado el comando %s", line->commands[i].filename);
+                // fflush(stderr);
+                exit(1);
+            }
+            else
+            {
+                // printf("Hola soy el padre\n");
+                // fflush(stdout);
+                pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
+            }
+        }
+
+        // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
+        if (N > 1)
+        {
+            for (i = 0; i < N - 1; i++)
+            {
+                close(pipes_vector[i][0]);
+                close(pipes_vector[i][1]);
+            }
+        }
+
+        // si el comando se ejecuta en primer plano
+        if (line->background == 0)
+        {
+            // fprintf(stderr, "Foreground, Esperando a los hijos\n");
+            // fflush(stdout);
+            for (i = 0; i < N; i++)
+            {
+                waitpid(pids_vector[i], NULL, 0);
             }
         }
         else
         {
-            // printf("Hola soy el padre\n");
-            // fflush(stdout);
-            pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
+            add_job(pids_vector, input, num_childs);
+            fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
         }
 
-        fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
-        fflush(stderr);
-        execvp(line->commands[i].filename, line->commands[i].argv);
-        fprintf(stderr, "ERROR AL EJECUTAR EL COMANDO");
-        fflush(stderr);
-        exit(1);
-    }
+        // Liberar memoria al final
+        if (line->background == 0)
+        {
 
-    // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
-    if (N > 1)
-    {
-        for (i = 0; i < N - 1; i++)
-        {
-            close(pipes_vector[i][0]);
-            close(pipes_vector[i][1]);
+            if (N > 1)
+            {
+                for (i = 0; i < N - 1; i++)
+                {
+                    free(pipes_vector[i]);
+                }
+                free(pipes_vector);
+            }
+            free(pids_vector);
         }
-    }
+        else
+        { // DUDA CUANDO LIBERAMOS ESTA MEMORIA
 
-    // si el comando se ejecuta en primer plano
-    if (line->background == 0)
-    {
-        fprintf(stderr, "Foreground, Esperando a los hijos\n");
-        fflush(stdout);
-        fprintf(stdout, "El pid de este proceso es %d \n", getpid());
-        for (i = 0; i < N; i++)
-        {
-            waitpid(pids_vector[i], NULL, 0);
-        }
-    }
-    else
-    {
-        fprintf(stdout, "El pid de este proceso es %d \n", getpid());
-        add_job(pid, line);
-        fprintf(stderr, "[%d] %d\n", (jobs_number + 1), pid);
-        for (i = 0; i < N; i++)
-        {
-            waitpid(pids_vector[i], NULL, WNOHANG); // esperamos pero no bloqueamos
+            if (N > 1)
+            {
+                for (i = 0; i < N - 1; i++)
+                {
+                    free(pipes_vector[i]);
+                }
+                free(pipes_vector);
+            }
+            free(pids_vector);
         }
     }
 }
@@ -411,6 +490,8 @@ void umask_function(char input[1024])
                 // imprimimos la máscara actual
                 mode_t current_mask = umask(0); // establecemos máscara actual a 0
                 umask(current_mask);            // Restauramos la máscara anterior
+                printf("%04o\n", current_mask);
+                fflush(stdout);
                 printf("%04o\n", current_mask);
                 fflush(stdout);
             }
@@ -468,12 +549,15 @@ int main()
         }
         else if (strncmp(input, "jobs", 4) == 0)
         {
+            revisar_bg(); // para que me de tiempo a cambiarlo
             show_jobs_list();
         }
         else
         {
             execute_commands(input, pid, pids_vector, pipes_vector);
         }
+
+        revisar_bg();
 
         printf("%s", prompt);
         fflush;
