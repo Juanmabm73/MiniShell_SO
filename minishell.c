@@ -27,8 +27,8 @@ int jobs_number = 0; // número de jobs en el array
 int child_number; // hacemos como en relevos y la i
 char prompt[1024] = "msh> ";
 
-pid_t pid;          // pid del proceso
-pid_t *pids_vector; // puntero al vector de pids
+pid_t pid;        // pid del proceso
+int *pids_vector; // puntero al vector de pids
 int **pipes_vector = NULL;
 
 // ----------------------MANEJADORES DE SEÑALES----------------------
@@ -43,7 +43,7 @@ void sigint_handler()
         if (jobs[i].pid == fg_pgid)
         {
             kill(jobs[i].pid, SIGINT);
-            strcpy(jobs[i].state, "terminated");
+            strcpy(jobs[i].state, "done");
         }
     }
     fprintf(stdout, "\n%s", prompt);
@@ -54,23 +54,22 @@ void sigint_handler()
 void sigtstp_handler()
 {
     int i;
-    pid_t fg_pgid = tcgetpgrp(STDIN_FILENO);
-
-    for (i = 0; i < jobs_number; i++)
+    int pids_vector_size = sizeof(pids_vector) / sizeof(pids_vector[0]);
+    fprintf(stdout, "\n%d", pids_vector_size);
+    for (i = 0; i < pids_vector_size; i++)
     {
-        kill(jobs[i].pid, SIGTSTP);
-        strcpy(jobs[i].state, "stopped");
+        kill(pids_vector[i], SIGTSTP);
     }
+
     fprintf(stdout, "\n%s", prompt);
     fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
+// ----------------------PIDS, PIPES Y DESCRIPTORES----------------------
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
 int *create_pids_vector(int N)
 {
-    int *pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n pids
-    // printf("Array de pids creado correctamente \n");
-    // fflush(stdout);
+    int *pids_vector = (int *)malloc(N * sizeof(int)); // reservamos memoria para n Pid_Info
     return pids_vector;
 }
 
@@ -179,6 +178,7 @@ void redirect_pipes(int N, int i, int **pipes_vector)
     }
 }
 
+// ----------------------FUNCIONES PRINCIPALES----------------------
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO CD
 void execute_cd_command(char *rute)
 {
@@ -216,7 +216,6 @@ void execute_cd_command(char *rute)
     }
 }
 
-// ----------------------FUNCIONES PRINCIPALES----------------------
 // ---------------------------------------------------------------------------------FUNCION CD
 void cd_function(char input[1024])
 {
@@ -498,6 +497,11 @@ void umask_function(char input[1024])
     }
 }
 
+// ---------------------------------------------------------------------------------BG
+void bg_function(char input[1024])
+{
+}
+
 //----------------------FUNCION MAIN----------------------
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
@@ -536,6 +540,10 @@ int main()
         {
             revisar_bg(); // para que me de tiempo a cambiarlo
             show_jobs_list();
+        }
+        else if (strncmp(input, "bg", 2) == 0)
+        {
+            bg_function(input);
         }
         else
         {
