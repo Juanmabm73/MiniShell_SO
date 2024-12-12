@@ -28,7 +28,7 @@ int child_number; // hacemos como en relevos y la i
 char prompt[1024] = "msh> ";
 
 pid_t pid;          // pid del proceso
-pid_t *pids_vector; // puntero al vector de pids
+int *pids_vector; // puntero al vector de pids
 int **pipes_vector = NULL;
 
 int N;
@@ -36,24 +36,35 @@ char input[1024];
 
 // ----------------------MANEJADORES DE SEÑALES----------------------
 // ---------------------------------------------------------------------------------MANEJADORES SEÑALES FOREGROUND
+// ---------------------------------------------------------------------------------CTRL C
 void sigint_handler()
 {
     int i;
-    pid_t fg_pgid = tcgetpgrp(STDIN_FILENO);
+    // pid_t fg_pgid = tcgetpgrp(STDIN_FILENO);
+    fprintf(stderr, "Estoy en ctrl c el valor de N es: %d", N);
+    
+    if (pids_vector != NULL){
 
-    for (i = 0; i < jobs_number; i++)
-    {
-        if (jobs[i].pid == fg_pgid)
+        for (i = 0; i < N; i++)
         {
-            kill(jobs[i].pid, SIGINT);
-            strcpy(jobs[i].state, "terminated");
+            if (kill(pids_vector[i], SIGINT) == -1){
+                fprintf(stderr, "Error al enviar señal CTRL C al hijo \n");
+            } else{
+                fprintf(stderr, "Señal CTRL C enviada correctamente \n");
+            }   
+                
         }
+    } else {
+        fprintf(stderr, "El array de pids esta vacio \n");
     }
-    fprintf(stdout, "\n%s", prompt);
-    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
+
+    // fprintf(stdout, "\n%s", prompt);
+    // fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
+// ---------------------------------------------------------------------------------CTRL Z
+
 void sigtstp_handler()
 {
     int i;
@@ -293,7 +304,6 @@ void revisar_bg()
     int liberar = 0; // si se queda en 0 han acabado todos
     int n = jobs_number;
     int j;
-    int k; // numero de procesos dentro de cada job
     char status[1024];
     pid_t result;
 
@@ -324,7 +334,7 @@ void revisar_bg()
 }
 
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
-void execute_commands(char input[1024], pid_t pid, pid_t *pids_vector, int **pipes_vector)
+void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
 {
 
     int liberar = 0;
@@ -395,6 +405,7 @@ void execute_commands(char input[1024], pid_t pid, pid_t *pids_vector, int **pip
             // printf("Hola soy el padre\n");
             // fflush(stdout);
             pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
+            fprintf(stderr, "Pid en posicion %d de pids vector es: %d \n",i, pids_vector[i]);
         }
     }
 
@@ -541,7 +552,7 @@ int main()
         }
         else
         {
-            execute_commands(input, pid, pids_vector, pipes_vector);
+            execute_commands(input, pid, pipes_vector);
         }
 
         revisar_bg();
