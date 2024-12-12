@@ -25,6 +25,10 @@ int jobs_number = 0; // número de jobs en el array
 int child_number; // hacemos como en relevos y la i
 char prompt[1024] = "msh> ";
 
+pid_t pid;          // pid del proceso
+pid_t *pids_vector; // puntero al vector de pids
+int **pipes_vector = NULL;
+
 // ----------------------MANEJADORES DE SEÑALES----------------------
 // ---------------------------------------------------------------------------------MANEJADORES SEÑALES FOREGROUND
 void sigint_handler()
@@ -284,7 +288,7 @@ void show_jobs_list()
 }
 
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
-void execute_commands(char input[1024])
+void execute_commands(char input[1024], pid_t pid, pid_t *pids_vector, int **pipes_vector)
 {
 
     tline *line = tokenize(input);
@@ -300,8 +304,7 @@ void execute_commands(char input[1024])
     //-----------------------------------------------------------------------------
 
     pid_t pid;
-    pid_t *pids_vector = create_pids_vector(N); // puntero al vector de pids
-    int **pipes_vector = NULL;
+    pids_vector = create_pids_vector(N); // puntero al vector de pids
     if (N > 1)
     {
         pipes_vector = create_pipes_vector(N);
@@ -469,7 +472,7 @@ int main()
         }
         else
         {
-            execute_commands(input);
+            execute_commands(input, pid, pids_vector, pipes_vector);
         }
 
         printf("%s", prompt);
