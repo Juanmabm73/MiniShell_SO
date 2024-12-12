@@ -27,7 +27,31 @@ char prompt[1024] = "msh> ";
 
 // ----------------------MANEJADORES DE SEÑALES----------------------
 // ---------------------------------------------------------------------------------MANEJADORES SEÑALES FOREGROUND
-void sigint_foreground_handler()
+void sigint_handler()
+{
+    int pid = getpid();
+    if (pid > 0)
+    {
+        pid_t pid_group = getpgid(pid);
+        pid_t fg_pid_group = tcgetpgrp(STDIN_FILENO);
+        fprintf(stdout, "pid_group: %d, fg_pid_group: %d\n", pid_group, fg_pid_group);
+
+        if (pid_group == fg_pid_group)
+        {
+            // en primer plano
+            fprintf(stdout, "\n%s", prompt);
+            fflush(stdout);     // Asegúrate de que el prompt se imprima inmediatamente
+            kill(pid, SIGKILL); // mata el proceso
+        }
+    }
+    else
+    {
+        fprintf(stdout, "%s", prompt);
+        fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
+    }
+}
+
+void sigtstp_handler()
 {
     int pid = getpid();
     if (pid > 0)
@@ -35,24 +59,16 @@ void sigint_foreground_handler()
         pid_t pid_group = getpgid(pid);
         pid_t fg_pid_group = tcgetpgrp(STDIN_FILENO);
 
-        if (pid_group = fg_pid_group)
+        if (pid_group == fg_pid_group)
         {
-            // en primer plano
-        }
-        else
-        {
-            // en segundo plano
+            kill(pid, SIGTSTP); // envía la señal SIGTSTP para detener el proceso
+            fprintf(stdout, "\n%s", prompt);
         }
     }
     else
     {
-        fprintf(stdout, "%s", prompt)
+        fprintf(stdout, "%s", prompt);
     }
-}
-
-void sigtstp_foreground_handler()
-{
-    int pid = getpid();
 }
 
 // ----------------------FUNCIONES COMPLEMENTARIAS----------------------
@@ -351,8 +367,6 @@ void execute_commands(char input[1024])
         fprintf(stderr, "Foreground, Esperando a los hijos\n");
         fflush(stdout);
         fprintf(stdout, "El pid de este proceso es %d \n", getpid());
-        signal(SIGINT, sigint_foreground_handler);
-        signal(SIGTSTP, sigtstp_foreground_handler);
         for (i = 0; i < N; i++)
         {
             waitpid(pids_vector[i], NULL, 0);
@@ -360,7 +374,6 @@ void execute_commands(char input[1024])
     }
     else
     {
-        signal(SIGINT, sigint_background_handler);
         fprintf(stdout, "El pid de este proceso es %d \n", getpid());
         add_job(pid, line);
         fprintf(stderr, "[%d] %d\n", jobs_number + 1, pid);
@@ -379,7 +392,7 @@ void check_output_redirection(char input[1024], tline *line, int i)
         if (strcmp(line->commands[i].argv[j], ">") == 0)
         {
             output_file = line->commands[i].argv[j + 1];
-            line->commands[i].argv[j] = NULL; // Remove ">" and filename from arguments
+            line->commands[i].argv[j] = NULL; // eliminamos el ">" y el nombre del archivo
             break;
         }
     }
@@ -395,9 +408,10 @@ void check_output_redirection(char input[1024], tline *line, int i)
         if (dup2(fd, STDOUT_FILENO) == -1) // Redirect stdout to the file
         {
             perror("Error in dup2 for redirection");
+            close(fd);
             exit(1);
         }
-        close(fd);
+        close(fd); // Close the file descriptor after duplicating
         printf("Salida redirigida a %s\n", output_file);
         fflush(stdout);
     }
@@ -463,6 +477,10 @@ int main()
     char input[1024];
     // printf("%d \n", jobs_number);
     // fflush(stdout);
+
+    signal(SIGINT, sigint_handler);
+    signal(SIGTSTP, sigtstp_handler);
+
     printf("%s", prompt);
     fflush(stdout);
     while (fgets(input, sizeof(input), stdin) != NULL)
