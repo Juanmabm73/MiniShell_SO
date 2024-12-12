@@ -47,8 +47,8 @@ void sigtstp_handler()
 int *create_pids_vector(int N)
 {
     int *pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n pids
-    printf("Array de pids creado correctamente \n");
-    fflush(stdout);
+    // printf("Array de pids creado correctamente \n");
+    // fflush(stdout);
     return pids_vector;
 }
 
@@ -250,7 +250,7 @@ void add_job(pid_t pid, char *command){
 void show_jobs_list(){
     int i;
     for (i=0; i < jobs_number; i++){
-        printf("[%d] %s ---->        %s \n", jobs[i].job_id, jobs[i].state, jobs[i].command);
+        printf("[%d] %s        %s \n", jobs[i].job_id, jobs[i].state, jobs[i].command);
     }
 
 }
@@ -309,10 +309,10 @@ void execute_commands(char input[1024])
                 }
 
                 fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
-                fflush(stdout);
+                fflush(stderr);
                 execvp(line->commands[i].filename, line->commands[i].argv);
-                perror("ERROR AL EJECUTAR EL COMANDO");
-                fflush(stdout);
+                fprintf(stderr,"ERROR AL EJECUTAR EL COMANDO");
+                fflush(stderr);
                 exit(1);
             }
             else
@@ -336,15 +336,15 @@ void execute_commands(char input[1024])
         // si el comando se ejecuta en primer plano
         if (line ->background == 0)
         {
-            fprintf(stderr, "Foreground, Esperando a los hijos\n");
-            fflush(stdout);
+            // fprintf(stderr, "Foreground, Esperando a los hijos\n");
+            // fflush(stdout);
             for (i = 0; i < N; i++)
             {
                 waitpid(pids_vector[i], NULL, 0);
             }
         } else {
-            add_job(pid, line);
-            fprintf(stderr, "[%d] %d\n", jobs_number +1, pid);
+            add_job(pid, input);
+            fprintf(stderr, "[%d] %d\n", jobs_number-1, pid);
             for (i=0; i < N; i++){
                 waitpid(pids_vector[i],NULL, WNOHANG);              // esperamos pero no bloqueamos
             }
