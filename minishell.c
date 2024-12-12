@@ -29,24 +29,30 @@ char prompt[1024] = "msh> ";
 // ---------------------------------------------------------------------------------MANEJADORES SEÑALES FOREGROUND
 void sigint_foreground_handler()
 {
-    kill(getpid(), SIGKILL);
-    fprintf(stdout, "\n%s", prompt);
+    int pid = getpid();
+    if (pid > 0)
+    {
+        pid_t pid_group = getpgid(pid);
+        pid_t fg_pid_group = tcgetpgrp(STDIN_FILENO);
+
+        if (pid_group = fg_pid_group)
+        {
+            // en primer plano
+        }
+        else
+        {
+            // en segundo plano
+        }
+    }
+    else
+    {
+        fprintf(stdout, "%s", prompt)
+    }
 }
 
 void sigtstp_foreground_handler()
-{ // lo que tenemos que conseguir es que al hacer CTRL + Z la minishell no se pare
-    printf("\n");
-    printf("Suspender procesos en primer plano no esta implementado\n");
-    printf("%s", prompt);
-    fflush(stdout);
-}
-
-// ---------------------------------------------------------------------------------MANEJADORES SEÑALES BACKGROUND
-void sigint_background_handler()
 {
-    pid_t pid = getpid();
-    kill(pid, SIGINT);
-    fprintf(stdout, "\n%s", prompt);
+    int pid = getpid();
 }
 
 // ----------------------FUNCIONES COMPLEMENTARIAS----------------------
@@ -344,6 +350,7 @@ void execute_commands(char input[1024])
     {
         fprintf(stderr, "Foreground, Esperando a los hijos\n");
         fflush(stdout);
+        fprintf(stdout, "El pid de este proceso es %d \n", getpid());
         signal(SIGINT, sigint_foreground_handler);
         signal(SIGTSTP, sigtstp_foreground_handler);
         for (i = 0; i < N; i++)
@@ -354,6 +361,7 @@ void execute_commands(char input[1024])
     else
     {
         signal(SIGINT, sigint_background_handler);
+        fprintf(stdout, "El pid de este proceso es %d \n", getpid());
         add_job(pid, line);
         fprintf(stderr, "[%d] %d\n", jobs_number + 1, pid);
         for (i = 0; i < N; i++)
