@@ -31,18 +31,47 @@ char prompt[1024] = "msh> ";
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGINT
 void sigint_handler()
 {
-    write(STDOUT_FILENO, "\n", 1); // establecemos una nueva línea
-    printf("%s", prompt);          // imprimimos el prompt de la minishell
-    fflush(stdout);                // limpia el buffer de salida
+    int pid = getpid();
+    if (pid > 0)
+    {
+        pid_t pid_group = getpgid(pid);
+        pid_t fg_pid_group = tcgetpgrp(STDIN_FILENO);
+        fprintf(stdout, "pid_group: %d, fg_pid_group: %d\n", pid_group, fg_pid_group);
+
+        if (pid_group == fg_pid_group)
+        {
+            // en primer plano
+            fprintf(stdout, "\n%s", prompt);
+            fflush(stdout);     // Asegúrate de que el prompt se imprima inmediatamente
+            kill(pid, SIGKILL); // mata el proceso
+        }
+    }
+    else
+    {
+        fprintf(stdout, "%s", prompt);
+        fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
+    }
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
 void sigtstp_handler()
-{ // lo que tenemos que conseguir es que al hacer CTRL + Z la minishell no se pare
-    printf("\n");
-    printf("Suspender procesos en primer plano no esta implementado\n");
-    printf("%s", prompt);
-    fflush(stdout);
+{
+    int pid = getpid();
+    if (pid > 0)
+    {
+        pid_t pid_group = getpgid(pid);
+        pid_t fg_pid_group = tcgetpgrp(STDIN_FILENO);
+
+        if (pid_group == fg_pid_group)
+        {
+            kill(pid, SIGTSTP); // envía la señal SIGTSTP para detener el proceso
+            fprintf(stdout, "\n%s", prompt);
+        }
+    }
+    else
+    {
+        fprintf(stdout, "%s", prompt);
+    }
 }
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
@@ -454,6 +483,8 @@ void umask_function(char input[1024])
                 // imprimimos la máscara actual
                 mode_t current_mask = umask(0); // establecemos máscara actual a 0
                 umask(current_mask);            // Restauramos la máscara anterior
+                printf("%04o\n", current_mask);
+                fflush(stdout);
             }
             else
             {
