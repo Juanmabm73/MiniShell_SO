@@ -76,8 +76,8 @@ void sigtstp_handler()
 int *create_pids_vector(int N)
 {
     int *pids_vector = (pid_t *)malloc(N * sizeof(pid_t)); // reservamos memoria para n pids
-    printf("Array de pids creado correctamente \n");
-    fflush(stdout);
+    // printf("Array de pids creado correctamente \n");
+    // fflush(stdout);
     return pids_vector;
 }
 
@@ -350,38 +350,52 @@ void execute_commands(char input[1024])
             pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
         }
     }
+    fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
+    fflush(stderr);
+    execvp(line->commands[i].filename, line->commands[i].argv);
+    fprintf(stderr, "ERROR AL EJECUTAR EL COMANDO");
+    fflush(stderr);
+    exit(1);
+}
+else
+{
+    // printf("Hola soy el padre\n");
+    // fflush(stdout);
+    pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
+}
+}
 
-    // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
-    if (N > 1)
+// cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
+if (N > 1)
+{
+    for (i = 0; i < N - 1; i++)
     {
-        for (i = 0; i < N - 1; i++)
-        {
-            close(pipes_vector[i][0]);
-            close(pipes_vector[i][1]);
-        }
+        close(pipes_vector[i][0]);
+        close(pipes_vector[i][1]);
     }
+}
 
-    // si el comando se ejecuta en primer plano
-    if (line->background == 0)
+// si el comando se ejecuta en primer plano
+if (line->background == 0)
+{
+    fprintf(stderr, "Foreground, Esperando a los hijos\n");
+    fflush(stdout);
+    fprintf(stdout, "El pid de este proceso es %d \n", getpid());
+    for (i = 0; i < N; i++)
     {
-        fprintf(stderr, "Foreground, Esperando a los hijos\n");
-        fflush(stdout);
-        fprintf(stdout, "El pid de este proceso es %d \n", getpid());
-        for (i = 0; i < N; i++)
-        {
-            waitpid(pids_vector[i], NULL, 0);
-        }
+        waitpid(pids_vector[i], NULL, 0);
     }
-    else
+}
+else
+{
+    fprintf(stdout, "El pid de este proceso es %d \n", getpid());
+    add_job(pid, line);
+    fprintf(stderr, "[%d] %d\n", jobs_number + 1, pid);
+    for (i = 0; i < N; i++)
     {
-        fprintf(stdout, "El pid de este proceso es %d \n", getpid());
-        add_job(pid, line);
-        fprintf(stderr, "[%d] %d\n", jobs_number + 1, pid);
-        for (i = 0; i < N; i++)
-        {
-            waitpid(pids_vector[i], NULL, WNOHANG); // esperamos pero no bloqueamos
-        }
+        waitpid(pids_vector[i], NULL, WNOHANG); // esperamos pero no bloqueamos
     }
+}
 }
 
 void check_output_redirection(char input[1024], tline *line, int i)
@@ -401,6 +415,28 @@ void check_output_redirection(char input[1024], tline *line, int i)
     {
         int fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd == -1)
+            // si el comando se ejecuta en primer plano
+            if (line->background == 0)
+            {
+                // fprintf(stderr, "Foreground, Esperando a los hijos\n");
+                // fflush(stdout);
+                for (i = 0; i < N; i++)
+                {
+                    waitpid(pids_vector[i], NULL, 0);
+                }
+            }
+            else
+            {
+                add_job(pid, input);
+                fprintf(stderr, "[%d] %d\n", jobs_number - 1, pid);
+                for (i = 0; i < N; i++)
+                {
+                    waitpid(pids_vector[i], NULL, WNOHANG); // esperamos pero no bloqueamos
+                }
+            }
+
+        // Liberar memoria al final
+        if (N > 1)
         {
             perror("Error opening file for redirection");
             exit(1);
