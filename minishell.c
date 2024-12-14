@@ -27,7 +27,7 @@ int jobs_number = 0; // número de jobs en el array
 int child_number; // hacemos como en relevos y la i
 char prompt[1024] = "msh> ";
 
-pid_t pid;          // pid del proceso
+pid_t pid;        // pid del proceso
 int *pids_vector; // puntero al vector de pids
 int **pipes_vector = NULL;
 
@@ -40,26 +40,28 @@ char input[1024];
 void sigint_handler()
 {
     int i;
-    // pid_t fg_pgid = tcgetpgrp(STDIN_FILENO);
     fprintf(stderr, "Estoy en ctrl c el valor de N es: %d", N);
-    
-    if (pids_vector != NULL){
 
+    if (pids_vector != NULL)
+    {
         for (i = 0; i < N; i++)
         {
-            if (kill(pids_vector[i], SIGINT) == -1){
+            if (kill(pids_vector[i], SIGINT) == -1)
+            {
                 fprintf(stderr, "Error al enviar señal CTRL C al hijo \n");
-            } else{
+            }
+            else
+            {
                 fprintf(stderr, "Señal CTRL C enviada correctamente \n");
-            }   
-                
+            }
         }
-    } else {
-        fprintf(stderr, "El array de pids esta vacio \n");
     }
-
-    // fprintf(stdout, "\n%s", prompt);
-    // fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
+    else
+    {
+        fprintf(stdout, "No hay ningún proceso que parar \n");
+    }
+    fprintf(stdout, "\n%s", prompt);
+    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
@@ -68,13 +70,32 @@ void sigint_handler()
 void sigtstp_handler()
 {
     int i;
-    pid_t fg_pgid = tcgetpgrp(STDIN_FILENO);
+
+    if (pids_vector != NULL)
+    {
+        for (i = 0; i < N; i++)
+        {
+            add_job(pids_vector, input, N);
+            if (kill(pids_vector[i], SIGTSTP) == -1)
+            {
+                fprintf(stderr, "Error al enviar señal CTRL Z al hijo \n");
+            }
+            else
+            {
+                fprintf(stderr, "Señal CTRL Z enviada correctamente \n");
+            }
+        }
+    }
+    else
+    {
+        fprintf(stdout, "No hay ningún proceso que parar \n");
+    }
 
     for (i = 0; i < jobs_number; i++)
     {
-        kill(jobs[i].pid, SIGTSTP);
-        strcpy(jobs[i].state, "stopped");
+        fprintf(stdout, "%s\n", jobs[i].command);
     }
+
     fprintf(stdout, "\n%s", prompt);
     fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
@@ -221,7 +242,7 @@ void execute_cd_command(char *rute)
         {
             printf("El directorio actual es: %s \n", cwd);
             setenv("PWD", cwd, 1); // actualizamos el valor de PWD
-            snprintf(prompt, sizeof(prompt), "msh:%s >", cwd);
+            snprintf(prompt, sizeof(prompt), "msh:%s > ", cwd);
         }
         else
         {
@@ -374,8 +395,8 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
         }
         else if (pid == 0) // si es el hijo
         {
-            // printf("Hola soy el proceso hijo %d \n", i);
-            // fflush(stdout);
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
 
             if (N > 1)
             {
@@ -405,7 +426,7 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
             // printf("Hola soy el padre\n");
             // fflush(stdout);
             pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
-            fprintf(stderr, "Pid en posicion %d de pids vector es: %d \n",i, pids_vector[i]);
+            fprintf(stderr, "Pid en posicion %d de pids vector es: %d \n", i, pids_vector[i]);
         }
     }
 
@@ -516,10 +537,6 @@ void umask_function(char input[1024])
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
 {
-    // int i;
-
-        // printf("%d \n", jobs_number);
-    // fflush(stdout);
 
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
