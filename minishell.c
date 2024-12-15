@@ -76,6 +76,7 @@ void sigtstp_handler()
         for (i = 0; i < N; i++)
         {
             add_job(pids_vector, input, N);
+            strcpy(jobs[jobs_number-1].state, "stopped");
             if (kill(pids_vector[i], SIGTSTP) == -1)
             {
                 fprintf(stderr, "Error al enviar señal CTRL Z al hijo \n");
@@ -99,6 +100,43 @@ void sigtstp_handler()
 
     fprintf(stdout, "\n%s", prompt);
     fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
+}
+
+void bg(char *input){
+    int i = 0;
+    int n;
+    char *tokens[3];            // para que solo quepan 3 como mucho contando con el fin de linea
+    int id;
+    
+    // tokens[i] = strtok(input, " ");
+    // while(tokens[i] != NULL && i < 2){
+    //     i++;
+    //     tokens[i] = strtok(NULL, " ");
+    // }
+
+    // if (tokens[2] != NULL) {
+    //     fprintf(stderr, "Error en el numero de argumentos");
+    //     return (1);
+    // }
+
+
+
+
+    if (tokens[1] == NULL){
+        // reanudamos el ultimo
+    } else {
+        id = atoi(tokens[i]);
+        fprintf(stderr, "Id de job a reanudar: %d \n", id);
+        n = jobs[id].childs;
+        for (i=0; i < n; i++){
+            if (kill(jobs[id].child_pids[i], SIGCONT) == -1){
+                fprintf(stderr, "Error al reanudar el proceso %d. %s\n", id, strerror(errno));
+                return(1);
+            } 
+        }
+        strcpy(jobs[id].state, "reanudao");
+        show_jobs_list();
+    }
 }
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
@@ -417,6 +455,23 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
     N = line->ncommands;
     int i;
     int num_childs = line->commands->argc; // numero de hijos
+    int valid_line = 0;
+
+    // hacemos la comprobación de que todos los comandos en la línea son validos en el momento que cambia a 1 valid_line salimos y volveriamos a mostrar el prompt
+    while(i < N && valid_line == 0){
+
+        if (line->commands[i].filename == NULL){
+            valid_line = 1;
+        }
+        i++;
+    }
+
+    if (valid_line == 1){
+        fprintf(stderr, "Error, comando no encontrado \n");
+        return(1);                                  
+    }
+    
+    
 
     // for (i = 0; i < N; i++)
     // {
@@ -434,7 +489,7 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
 
     // ------------------------------------------------------------------------------
 
-    // CREACION DE PROCESOS HIJOS Y LA DE DIOS
+    // CREACION DE PROCESOS HIJOS
     for (i = 0; i < N; i++)
     {
         child_number = i; // guardamos el id del hijo para tenerlo identificado despues de este for
@@ -474,28 +529,23 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
 
             // fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
             // fflush(stderr);
-            if (line->commands[i].filename == NULL)
-            {
-                fprintf(stderr, "Error: command not found\n");
-            }
-            else
-            {
-                execvp(line->commands[i].filename, line->commands[i].argv);
-            }
-            // fprintf(stderr,"No se ha encontrado el comando %s", line->commands[i].filename);
-            // fflush(stderr);
+            
+            execvp(line->commands[i].filename, line->commands[i].argv);
+            // si imprime esto significa que el exec no se hizo bien
+            fprintf(stderr,"No se ha encontrado el comando %s", line->commands[i].filename);
+            fflush(stderr);
             exit(1);
         }
-        else
+        else    // Padre
         {
-            // printf("Hola soy el padre\n");
-            // fflush(stdout);
-            pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición
-            fprintf(stderr, "Pid en posicion %d de pids vector es: %d \n", i, pids_vector[i]);
+            
+            pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición en array global de pids
+            // fprintf(stderr, "Pid en posicion %d de pids vector es: %d \n", i, pids_vector[i]);
         }
     }
 
-    // cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
+
+    //una vez fuera del for cerramos todos los descriptores de los pipes ya que el padre no usa ninguno y si lo cerramos antes los hijos heredan descriptores cerrados cosa que daría fallos
     if (N > 1)
     {
         for (i = 0; i < N - 1; i++)
@@ -505,50 +555,36 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
         }
     }
 
-    // si el comando se ejecuta en primer plano
-    if (line->background == 0)
+    
+    if (line->background == 0)                                  // si el comando se ejecuta en primer plano
     {
         // fprintf(stderr, "Foreground, Esperando a los hijos\n");
         // fflush(stdout);
         for (i = 0; i < N; i++)
         {
-            waitpid(pids_vector[i], NULL, 0);
+            waitpid(pids_vector[i], NULL, WUNTRACED);                   // Como buen padre esperamos que todos los hijos terminen
         }
     }
-    else
+    else                                                        // comando en background
     {
+        // no bloqueamos la ejecución y al salir comprobamos el estado de los hijos con waitpid y WNHANG
         add_job(pids_vector, input, num_childs);
         fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
     }
 
     // Liberar memoria al final
-    if (line->background == 0)
+    // DUDA TRATO ESPECIAL PARA MEMORIA EN BACKGROUND ??????????????????????????????? TRAS LA FINALIZACIÓN DE LOS HIJOS
+    if (N > 1)
     {
-
-        if (N > 1)
+        for (i = 0; i < N - 1; i++)
         {
-            for (i = 0; i < N - 1; i++)
-            {
-                free(pipes_vector[i]);
-            }
-            free(pipes_vector);
+            free(pipes_vector[i]);
         }
-        free(pids_vector);
+        free(pipes_vector);
     }
-    else
-    { // DUDA CUANDO LIBERAMOS ESTA MEMORIA
-
-        if (N > 1)
-        {
-            for (i = 0; i < N - 1; i++)
-            {
-                free(pipes_vector[i]);
-            }
-            free(pipes_vector);
-        }
-        free(pids_vector);
-    }
+    free(pids_vector);
 }
+    
 
 // ---------------------------------------------------------------------------------UMASK
 void umask_function(char input[1024])
@@ -631,6 +667,9 @@ int main()
         {
             revisar_bg(); // para que me de tiempo a cambiarlo
             show_jobs_list();
+        } else if (strncmp(input, "bg", 2) == 0) {
+            fprintf(stderr, "Vamos con la ejecucón de bg con el input %s \n", input);
+            bg(input);
         }
         else
         {
