@@ -91,10 +91,11 @@ void sigtstp_handler()
         fprintf(stdout, "No hay ningún proceso que parar \n");
     }
 
-    for (i = 0; i < jobs_number; i++)
-    {
-        fprintf(stdout, "%s\n", jobs[i].command);
-    }
+    // for (i = 0; i < jobs_number; i++)
+    // {
+    //     fprintf(stdout, "%s\n", jobs[i].command);
+    // }
+    show_jobs_list();
 
     fprintf(stdout, "\n%s", prompt);
     fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
@@ -354,6 +355,58 @@ void revisar_bg()
     }
 }
 
+void redirect_input_file(char *file){
+    fprintf(stderr,"File: %s \n", file);
+
+
+    int f = open(file, O_RDONLY);
+    if (f == -1){
+        fprintf(stderr, "Error. %s \n", strerror(errno));
+        exit(1);
+    }else{
+        if (dup2(f, STDIN_FILENO) == -1){
+            fprintf(stderr, "Error. %s\n", strerror(errno));
+            exit(1);
+        } else {
+            fprintf(stderr, "Redirección de entrada completada con éxito\n");
+        }
+    }
+    close(f);
+}
+
+
+void redirect_output_file(char *file){
+    int f = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (f == -1){
+        fprintf(stderr, "Error. %s \n", strerror(errno));
+        exit(1);
+    }else{
+        if (dup2(f, STDOUT_FILENO) == -1){
+            fprintf(stderr, "Error. %s\n", strerror(errno));
+            exit(1);
+        } else {
+            fprintf(stderr, "Redirección de salida completada con éxito\n");
+        }
+    }
+    close(f);
+}
+
+void redirect_output_error_file(char *file){
+    int f = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (f == -1){
+        fprintf(stderr, "Error. %s \n", strerror(errno));
+        exit(1);
+    }else{
+        if (dup2(f, STDERR_FILENO)  == -1 && (dup2(f, STDOUT_FILENO))){
+            fprintf(stderr, "Error. %s\n", strerror(errno));
+            exit(1);
+        } else {
+            fprintf(stderr, "Redirección de salida de error completada con éxito\n");
+        }
+    }
+    close(f);
+}
+
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
 void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
 {
@@ -395,8 +448,20 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
         }
         else if (pid == 0) // si es el hijo
         {
-            signal(SIGINT, SIG_DFL);
+            signal(SIGINT, SIG_DFL);                // cuando el hijo recibe estas señales las trata diferentes al padre
             signal(SIGTSTP, SIG_DFL);
+
+            if ((i == 0) && (line->redirect_input != NULL)){
+                redirect_input_file(line->redirect_input);
+            }  
+            if (i == N-1 && (line->redirect_error != NULL) )
+            {
+                redirect_output_error_file(line->redirect_error);
+            }
+            if (i == N-1 && (line->redirect_output != NULL)){
+                redirect_output_file(line->redirect_output);
+            }
+            
 
             if (N > 1)
             {
