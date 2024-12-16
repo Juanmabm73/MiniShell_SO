@@ -184,7 +184,7 @@ int **create_pipes_vector(int N)
         if (!pipes_vector[i])
         {
             fprintf(stderr, "Error al reservar memoria en las pipes");
-            return;
+            return(NULL);
         }
     }
 
@@ -503,10 +503,18 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
 {
     char status[1024];
     tline *line = tokenize(input);
+
+    // meter comprobacion del tokenize 
+
+
     N = line->ncommands;
     int i;
     int num_childs = line->commands->argc; // numero de hijos
     int valid_line = 0;
+
+    for (i=0; i < N; i++){
+        fprintf(stderr, "%s \n", line->commands[i].filename);
+    }
 
     // hacemos la comprobación de que todos los comandos en la línea son validos en el momento que cambia a 1 valid_line salimos y volveriamos a mostrar el prompt
     i = 0;
