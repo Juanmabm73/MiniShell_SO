@@ -105,27 +105,24 @@ void sigtstp_handler()
 void bg(char *input){
     int i = 0;
     int n;
-    char *tokens[3];            // para que solo quepan 3 como mucho contando con el fin de linea
+    char *token;            // para que solo quepan 3 como mucho contando con el fin de linea
     int id;
     
-    // tokens[i] = strtok(input, " ");
-    // while(tokens[i] != NULL && i < 2){
-    //     i++;
-    //     tokens[i] = strtok(NULL, " ");
-    // }
-
-    // if (tokens[2] != NULL) {
-    //     fprintf(stderr, "Error en el numero de argumentos");
-    //     return (1);
-    // }
+    token = strtok(input, " ");
+    token = strtok(NULL, " ");
 
 
 
 
-    if (tokens[1] == NULL){
+    if (token == NULL){
         // reanudamos el ultimo
     } else {
-        id = atoi(tokens[i]);
+        id = atoi(token);
+        if (id >= jobs_number || id < 0){
+            fprintf(stderr,"Error en id del job \n");
+            return(1);
+        }
+
         fprintf(stderr, "Id de job a reanudar: %d \n", id);
         n = jobs[id].childs;
         for (i=0; i < n; i++){
