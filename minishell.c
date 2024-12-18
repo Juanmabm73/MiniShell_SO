@@ -685,18 +685,52 @@ void redirections_to_file(tline *line)
 
 void redirections_to_standar()
 {
-    if (dup2(STDIN_FILENO, 0) == -1)
+    int fd;
+
+    // Redirigir la entrada estándar (stdin) de nuevo a la consola
+    fd = open("/dev/tty", O_RDONLY);
+    if (fd == -1)
     {
-        perror("Error al restaurar la entrada estándar");
+        fprintf(stderr, "Error al abrir /dev/tty para stdin. %s\n", strerror(errno));
+        return;
     }
-    if (dup2(STDOUT_FILENO, 1) == -1)
+    if (dup2(fd, STDIN_FILENO) == -1)
     {
-        perror("Error al restaurar la salida estándar");
+        fprintf(stderr, "Error al redirigir stdin. %s\n", strerror(errno));
+        close(fd);
+        return;
     }
-    if (dup2(STDERR_FILENO, 2) == -1)
+    close(fd);
+
+    // Redirigir la salida estándar (stdout) de nuevo a la consola
+    fd = open("/dev/tty", O_WRONLY);
+    if (fd == -1)
     {
-        perror("Error al restaurar la salida de error estándar");
+        fprintf(stderr, "Error al abrir /dev/tty para stdout. %s\n", strerror(errno));
+        return;
     }
+    if (dup2(fd, STDOUT_FILENO) == -1)
+    {
+        fprintf(stderr, "Error al redirigir stdout. %s\n", strerror(errno));
+        close(fd);
+        return;
+    }
+    close(fd);
+
+    // Redirigir la salida de error estándar (stderr) de nuevo a la consola
+    fd = open("/dev/tty", O_WRONLY);
+    if (fd == -1)
+    {
+        fprintf(stderr, "Error al abrir /dev/tty para stderr. %s\n", strerror(errno));
+        return;
+    }
+    if (dup2(fd, STDERR_FILENO) == -1)
+    {
+        fprintf(stderr, "Error al redirigir stderr. %s\n", strerror(errno));
+        close(fd);
+        return;
+    }
+    close(fd);
 }
 
 // ----------------------FUNCION MAIN----------------------
