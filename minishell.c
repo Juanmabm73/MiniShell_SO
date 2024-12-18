@@ -20,6 +20,7 @@ typedef struct
     char command[1024]; // linea de comando que nos pasan
     pid_t *child_pids;  // array dinamico guarda todos los pids de los hijos
     int childs;         // numero de hijos
+    int stopped;
 } Job;
 
 Job *jobs = NULL;    // array que nos guardará los jobs, dinámico
@@ -226,6 +227,7 @@ void add_job(pid_t *pids_vector, char *command, int num_childs)
     jobs[jobs_number].job_id = jobs_number;
     strcpy(jobs[jobs_number].state, "running");                                     // Estado inicial
     strncpy(jobs[jobs_number].command, command, sizeof(jobs[jobs_number].command)); // Comando ejecutado
+    jobs[jobs_number].stopped = 0;
 
     jobs[jobs_number].child_pids = realloc(jobs[jobs_number].child_pids, (num_childs * sizeof(pid_t)));
     if (!jobs[jobs_number].child_pids)
@@ -612,8 +614,9 @@ void sigint_handler()
     int i;
     fprintf(stderr, "Estoy en ctrl c el valor de N es: %d", N);
 
-    if (pids_vector != NULL)
+    if (pids_vector != NULL && jobs[jobs_number-1].stopped == 0)
     {
+        fprintf(stderr, " sttoped: %d \n", jobs[jobs_number -1].stopped);
         for (i = 0; i < N; i++)
         {
             if (kill(pids_vector[i], SIGINT) == -1)
@@ -649,6 +652,7 @@ void sigtstp_handler()
             {
                 add_job(pids_vector, input, N);
                 strcpy(jobs[jobs_number - 1].state, "stopped");
+                jobs[jobs_number-1].stopped = 1;
                 fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
                 show_jobs_list();
             }
