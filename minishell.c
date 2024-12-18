@@ -183,32 +183,20 @@ void execute_cd_command(char *rute)
 
 // ----------------------FUNCIONES PRINCIPALES----------------------
 // ---------------------------------------------------------------------------------FUNCION CD
-void cd_function(char input[1024])
+void cd_function(tline *line)
 {
-    char *token;
-    // Tokenizar la cadena por espacios
-    token = strtok(input, " "); // El primer token será "cd"
-    token = strtok(NULL, " ");  // El siguiente token debería ser el directorio
-
+    fprintf(stderr, "%d \n", line->commands->argc);
     // Verificamos el número de tokens obtenidos
-    if (token != NULL)
+    if (line->commands->argc == 1)                      // en caso de que no haya nada  
     {
-        // Si hay un segundo token, pasamos a la función execute_cd_command
-        // Verificar si hay más de dos partes
-        if (strtok(NULL, " ") != NULL)
-        {
-            printf("Error: El comando 'cd' solo acepta un argumento.\n");
-        }
-        else
-        {
-            // Llamamos a la función para cambiar al directorio
-            token[strcspn(token, "\n")] = '\0';
-            execute_cd_command(token);
-        }
+            execute_cd_command(NULL);
     }
-    else
+    else if (line->commands->argc == 2)                 // en caso de que haya una ruta
     {
-        execute_cd_command(NULL);
+        execute_cd_command(line->commands->argv[1]);
+    }else {
+        fprintf(stderr, "Error en el numero de argumentos \n");
+        return;
     }
 }
 
@@ -294,18 +282,17 @@ void review_bg()
 }
 
 // ---------------------------------------------------------------------------------REANUDAR PROCESO (BG)
-void bg(char *input)
+void bg(tline *line)
 {
     int i = 0;
     int j;
     int n;
-    char *token; // para que solo quepan 3 como mucho contando con el fin de linea
+    
     int id;
 
-    token = strtok(input, " ");
-    token = strtok(NULL, " ");
+    
 
-    if (token == NULL)
+    if (line->commands->argc == 1)
     {
         for (i = jobs_number - 1; i >= 0; i--)
         {
@@ -325,9 +312,9 @@ void bg(char *input)
             }
         }
     }
-    else
+    else if (line->commands->argc == 2)
     {
-        id = atoi(token);
+        id = atoi(line->commands->argv[1]);
         if (id >= jobs_number || id < 0)
         {
             fprintf(stderr, "Error en id del job \n");
@@ -346,6 +333,9 @@ void bg(char *input)
         }
         strcpy(jobs[id].state, "running");
         show_jobs_list();
+    } else {
+        fprintf(stderr, "Error en el numero de argumentos \n" );
+
     }
 }
 
@@ -425,12 +415,12 @@ void redirect_output_error_file(char *file)
 }
 
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
-void execute_commands(char input[1024])
+void execute_commands(tline *line)
 {
     pid_t pid;
     int **pipes_vector = NULL;
 
-    tline *line = tokenize(input);
+    
     if (line == NULL)
     {
         fprintf(stderr, "Error: Fallo al tokenizar la línea de comandos.\n");
@@ -580,53 +570,39 @@ void execute_commands(char input[1024])
 }
 
 // ---------------------------------------------------------------------------------UMASK
-void umask_function(char input[1024])
+void umask_function(tline *line)
 {
-    char *token;
-    // Tokenizar la cadena por espacios
-    token = strtok(input, " "); // El primer token será el comando "umask"
-    token = strtok(NULL, " ");  // El siguiente token debería ser el modo
+    
+
+    mode_t new_mask; // almacena la nueva máscara de permisos
 
     // Verificamos el número de tokens obtenidos
-    if (token != NULL)
+    if (line->commands->argc == 1)
     {
-        // verificamos si hay mas de una opcion
-        if (strtok(NULL, " ") != NULL)
+
+        // imprimimos la máscara actual
+        mode_t current_mask = umask(0); // establecemos máscara actual a 0
+        umask(current_mask);            // Restauramos la máscara anterior
+        printf("%04o\n", current_mask);
+        fflush(stdout);
+    } else if (line->commands->argc == 2){
+
+            // Verificar si el token es una máscara válida
+        char *endptr;
+        new_mask = strtol(line->commands->argv[1], &endptr, 8); // Convertir el token a un número en base 8
+
+        if (*endptr != '\0')
         {
-            printf("Error: El comando 'umask' solo acepta un argumento.\n");
+            fprintf(stderr, "Error: La máscara proporcionada no es válida.\n");
+            return;
         }
-        else
-        {
-            mode_t new_mask; // almacena la nueva máscara de permisos
 
-            if (token == NULL) // no se proporciona nueva máscara
-            {
-                // imprimimos la máscara actual
-                mode_t current_mask = umask(0); // establecemos máscara actual a 0
-                umask(current_mask);            // Restauramos la máscara anterior
-                printf("%04o\n", current_mask);
-                fflush(stdout);
-            }
-            else
-            {
-                // Verificar si el token es una máscara válida
-                char *endptr;
-                new_mask = strtol(token, &endptr, 8); // Convertir el token a un número en base 8
-
-                if (*endptr != '\0')
-                {
-                    fprintf(stderr, "Error: La máscara proporcionada no es válida.\n");
-                    return;
-                }
-
-                // Aplicar la nueva máscara
-                umask(new_mask);
-            }
-        }
-    }
-    else
+        // Aplicar la nueva máscara
+        umask(new_mask);
+            
+    } else
     {
-        fprintf(stderr, "Error al tokenizar la entrada\n");
+        fprintf(stderr, "Error en el numero de comandos\n");
         return;
     }
 }
@@ -690,10 +666,32 @@ void sigtstp_handler()
     fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
+
+void redirections_to_file(tline *line){
+    if ((line->redirect_input != NULL))
+    {
+        redirect_input_file(line->redirect_input);
+    }
+    if ((line->redirect_error != NULL))
+    {
+        redirect_output_error_file(line->redirect_error);
+    }
+    if ((line->redirect_output != NULL))
+    {
+        redirect_output_file(line->redirect_output);
+    }
+}
+
+void redirections_to_standar() {
+    //hashjhas
+}
+
 // ----------------------FUNCION MAIN----------------------
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
 {
+    char *input_cpy;
+    tline *line;
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
 
@@ -701,38 +699,45 @@ int main()
     fflush(stdout);
     while (fgets(input, sizeof(input), stdin) != NULL)
     {
+        strcpy(input_cpy, input);
+        line = tokenize(input);
         N = 0;
-        if (strcmp(input, "\n") == 0)
+        
+        redirections_to_file(line);
+
+        if (strcmp(input_cpy, "\n") == 0)
         {
             printf("Entrada vacía. Saliendo...\n");
         }
-        else if (strncmp(input, "cd", 2) == 0)
+        else if (strncmp(input_cpy, "cd", 2) == 0)
         {
-            cd_function(input);
+            cd_function(line);
         }
-        else if (strncmp(input, "exit", 4) == 0)
+        else if (strncmp(input_cpy, "exit", 4) == 0)
         {
             exit_shell();
         }
-        else if (strncmp(input, "umask", 5) == 0)
+        else if (strncmp(input_cpy, "umask", 5) == 0)
         {
-            umask_function(input);
+            umask_function(line);
         }
-        else if (strncmp(input, "jobs", 4) == 0)
+        else if (strncmp(input_cpy, "jobs", 4) == 0)
         {
             review_bg(); // para que me de tiempo a cambiarlo
             show_jobs_list();
         }
-        else if (strncmp(input, "bg", 2) == 0)
+        else if (strncmp(input_cpy, "bg", 2) == 0)
         {
-            bg(input);
+            bg(line);
         }
         else
         {
-            execute_commands(input);
+            execute_commands(line);
         }
 
         review_bg();
+
+        // redirections_to_standar();
 
         printf("%s", prompt);
         fflush(stdout);
