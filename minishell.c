@@ -145,10 +145,6 @@ void redirect_pipes(int N, int i, int **pipes_vector)
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO CD
 void execute_cd_command(char *rute)
 {
-
-    printf("La ruta que llega a cd es: %s \n", rute);
-    fflush(stdout);
-
     if (rute == NULL)
     {
         rute = getenv("HOME");
@@ -164,7 +160,6 @@ void execute_cd_command(char *rute)
     }
     else
     {
-        printf("Se ha podido redirigir al directorio \n");
         char cwd[1024];
         if (getcwd(cwd, sizeof(cwd)) != NULL)
         {
@@ -186,8 +181,6 @@ void execute_cd_command(char *rute)
 // ---------------------------------------------------------------------------------FUNCION CD
 void cd_function(tline *line)
 {
-    fprintf(stderr, "%d \n", line->commands->argc);
-    // Verificamos el número de tokens obtenidos
     if (line->commands->argc == 1) // en caso de que no haya nada
     {
         execute_cd_command(NULL);
@@ -361,10 +354,6 @@ void redirect_input_file(char *file)
             fprintf(stderr, "Error. %s\n", strerror(errno));
             return;
         }
-        else
-        {
-            fprintf(stderr, "Redirección de entrada completada con éxito\n");
-        }
     }
     close(f);
 }
@@ -384,10 +373,6 @@ void redirect_output_file(char *file)
         {
             fprintf(stderr, "Error. %s\n", strerror(errno));
             return;
-        }
-        else
-        {
-            fprintf(stderr, "Redirección de salida completada con éxito\n");
         }
     }
     close(f);
@@ -409,10 +394,6 @@ void redirect_output_error_file(char *file)
             fprintf(stderr, "Error. %s\n", strerror(errno));
             return;
         }
-        else
-        {
-            fprintf(stderr, "Redirección de salida de error completada con éxito\n");
-        }
     }
     close(f);
 }
@@ -423,21 +404,10 @@ void execute_commands(tline *line)
     pid_t pid;
     int **pipes_vector = NULL;
 
-    if (line == NULL)
-    {
-        fprintf(stderr, "Error: Fallo al tokenizar la línea de comandos.\n");
-        return;
-    }
-
     N = line->ncommands;
     int i;
     int num_childs = line->ncommands; // numero de hijos
     int valid_line = 0;
-
-    for (i = 0; i < N; i++)
-    {
-        fprintf(stderr, "%s \n", line->commands[i].filename);
-    }
 
     // hacemos la comprobación de que todos los comandos en la línea son validos en el momento que cambia a 1 valid_line salimos y volveriamos a mostrar el prompt
     i = 0;
@@ -570,13 +540,11 @@ void execute_commands(tline *line)
 // ---------------------------------------------------------------------------------UMASK
 void umask_function(tline *line)
 {
-
     mode_t new_mask; // almacena la nueva máscara de permisos
 
     // Verificamos el número de tokens obtenidos
     if (line->commands->argc == 1)
     {
-
         // imprimimos la máscara actual
         mode_t current_mask = umask(0); // establecemos máscara actual a 0
         umask(current_mask);            // Restauramos la máscara anterior
@@ -585,12 +553,11 @@ void umask_function(tline *line)
     }
     else if (line->commands->argc == 2)
     {
-
         // Verificar si el token es una máscara válida
         char *endptr;
         new_mask = strtol(line->commands->argv[1], &endptr, 8); // Convertir el token a un número en base 8
 
-        if (*endptr != '\0' || new_mask < 0 || new_mask > 0777)
+        if (*endptr != '\0' || new_mask > 0777)
         {
             fprintf(stderr, "Error: La máscara proporcionada no es válida.\n");
             return;
@@ -612,20 +579,15 @@ void umask_function(tline *line)
 void sigint_handler()
 {
     int i;
-    fprintf(stderr, "Estoy en ctrl c el valor de N es: %d", N);
 
-    if (pids_vector != NULL && jobs[jobs_number-1].stopped == 0)
+    if (pids_vector != NULL && jobs[jobs_number - 1].stopped == 0)
     {
-        fprintf(stderr, " sttoped: %d \n", jobs[jobs_number -1].stopped);
+        fprintf(stderr, " sttoped: %d \n", jobs[jobs_number - 1].stopped);
         for (i = 0; i < N; i++)
         {
             if (kill(pids_vector[i], SIGINT) == -1)
             {
                 fprintf(stderr, "Error al enviar señal CTRL C al hijo \n");
-            }
-            else
-            {
-                fprintf(stderr, "Señal CTRL C enviada correctamente \n");
             }
         }
     }
@@ -652,7 +614,7 @@ void sigtstp_handler()
             {
                 add_job(pids_vector, input, N);
                 strcpy(jobs[jobs_number - 1].state, "stopped");
-                jobs[jobs_number-1].stopped = 1;
+                jobs[jobs_number - 1].stopped = 1;
                 fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
                 show_jobs_list();
             }
@@ -689,31 +651,29 @@ void redirections_to_standar()
 {
     int fd;
 
-    // Redirigir la entrada estándar (stdin) de nuevo a la consola
     fd = open("/dev/tty", O_RDONLY);
     if (fd == -1)
     {
-        fprintf(stderr, "Error al abrir /dev/tty para stdin. %s\n", strerror(errno));
+        fprintf(stderr, "Error al restaurar la entrada estandar. %s\n", strerror(errno));
         return;
     }
     if (dup2(fd, STDIN_FILENO) == -1)
     {
-        fprintf(stderr, "Error al redirigir stdin. %s\n", strerror(errno));
+        fprintf(stderr, "Error al restaurar la entrada estándar. %s\n", strerror(errno));
         close(fd);
         return;
     }
     close(fd);
 
-    // Redirigir la salida estándar (stdout) de nuevo a la consola
     fd = open("/dev/tty", O_WRONLY);
     if (fd == -1)
     {
-        fprintf(stderr, "Error al abrir /dev/tty para stdout. %s\n", strerror(errno));
+        fprintf(stderr, "Error al restaurar la salida estándar. %s\n", strerror(errno));
         return;
     }
     if (dup2(fd, STDOUT_FILENO) == -1)
     {
-        fprintf(stderr, "Error al redirigir stdout. %s\n", strerror(errno));
+        fprintf(stderr, "Error al restaurar la salida estándar. %s\n", strerror(errno));
         close(fd);
         return;
     }
@@ -723,12 +683,12 @@ void redirections_to_standar()
     fd = open("/dev/tty", O_WRONLY);
     if (fd == -1)
     {
-        fprintf(stderr, "Error al abrir /dev/tty para stderr. %s\n", strerror(errno));
+        fprintf(stderr, "Error al restaurar la salida de error. %s\n", strerror(errno));
         return;
     }
     if (dup2(fd, STDERR_FILENO) == -1)
     {
-        fprintf(stderr, "Error al redirigir stderr. %s\n", strerror(errno));
+        fprintf(stderr, "Error al restaurar la salida de error. %s\n", strerror(errno));
         close(fd);
         return;
     }
@@ -739,7 +699,7 @@ void redirections_to_standar()
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
 {
-    char *input_cpy;
+    char input_cpy[1024];
     tline *line;
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
@@ -750,6 +710,12 @@ int main()
     {
         strcpy(input_cpy, input);
         line = tokenize(input);
+        if (line == NULL)
+        {
+            fprintf(stderr, "Error: Fallo al tokenizar la línea de comandos.\n");
+            return 1;
+        }
+
         N = 0;
 
         redirections_to_file(line);
