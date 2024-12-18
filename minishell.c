@@ -32,7 +32,6 @@ int *pids_vector; // puntero al vector de pids
 
 int N;
 char input[1024];
-int l;
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
 int *create_pids_vector(int N)
@@ -42,7 +41,6 @@ int *create_pids_vector(int N)
     if (!pids_vector)
     {
         fprintf(stderr, "Error al reservar memoria para los pids");
-        exit(1);
     }
 
     return pids_vector;
@@ -62,7 +60,7 @@ int **create_pipes_vector(int N)
         if (!pipes_vector[i])
         {
             fprintf(stderr, "Error al reservar memoria en las pipes");
-            exit(1);
+            return (NULL);
         }
     }
 
@@ -118,6 +116,8 @@ void redirect_pipes(int N, int i, int **pipes_vector)
     }
     else if (i == N - 1)
     { // ultimo mandato
+        // printf("Proceso hijo %d: Redirigiendo entrada del pipe\n", i);
+        // fflush(stdout);
         if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1)
         {
             perror("Error en dup2 (último mandato)");
@@ -126,6 +126,8 @@ void redirect_pipes(int N, int i, int **pipes_vector)
     }
     else
     { // mandato intermedio
+        // printf("Proceso hijo %d: Redirigiendo entrada y salida del pipe\n", i);
+        // fflush(stdout);
         if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1)
         {
             perror("Error en dup2 (mandato intermedio, entrada)");
@@ -142,6 +144,8 @@ void redirect_pipes(int N, int i, int **pipes_vector)
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO CD
 void execute_cd_command(char *rute)
 {
+
+    printf("La ruta que llega a cd es: %s \n", rute);
     fflush(stdout);
 
     if (rute == NULL)
@@ -155,13 +159,15 @@ void execute_cd_command(char *rute)
 
     if (chdir(rute) == -1)
     {
-        fprintf(stdout, "No entra en el directorio:%s, %s \n", rute, strerror(errno));
+        fprintf(stdout, "No entra en el direcotorio:%s, %s \n", rute, strerror(errno));
     }
     else
     {
+        printf("Se ha podido redirigir al directorio \n");
         char cwd[1024];
         if (getcwd(cwd, sizeof(cwd)) != NULL)
         {
+            printf("El directorio actual es: %s \n", cwd);
             if (setenv("PWD", cwd, 1) == -1)
             {
                 perror("Error al actualizar la variable de entorno PWD");
@@ -210,13 +216,6 @@ void cd_function(char input[1024])
 void exit_shell()
 {
     printf("Saliendo de la minishell...\n");
-
-    for (int i = 0; i < jobs_number; i++)
-    {
-        free(jobs[i].child_pids);
-    }
-    free(jobs);
-    free(pids_vector);
     exit(0);
 }
 //----------------------JOBS----------------------
@@ -229,12 +228,11 @@ void add_job(pid_t *pids_vector, char *command, int num_childs)
     if (!jobs)
     {
         fprintf(stderr, "Error al reservar memoria para los jobs");
-        exit(1);
+        return;
     }
 
     // rellenamos el nuevo job
     jobs[jobs_number].pid = pids_vector[0];
-    printf("PID: %d, asignado por pid %d\n", jobs[jobs_number].pid, pids_vector[0]);
     jobs[jobs_number].job_id = jobs_number;
     strcpy(jobs[jobs_number].state, "running");                                     // Estado inicial
     strncpy(jobs[jobs_number].command, command, sizeof(jobs[jobs_number].command)); // Comando ejecutado
@@ -243,7 +241,7 @@ void add_job(pid_t *pids_vector, char *command, int num_childs)
     if (!jobs[jobs_number].child_pids)
     {
         fprintf(stderr, "Error al reservar memoria para los pids de los hijos");
-        exit(1);
+        return;
     }
 
     for (i = 0; i < num_childs; i++)
@@ -262,61 +260,6 @@ void show_jobs_list()
     for (i = 0; i < jobs_number; i++)
     {
         printf("[%d] %s ---->        %s \n", jobs[i].job_id, jobs[i].state, jobs[i].command);
-    }
-}
-
-// ---------------------------------------------------------------------------------REANUDAR PROCESO (BG)
-void bg(char *input)
-{
-    int i = 0;
-    int n;
-    char *token; // para que solo quepan 3 como mucho contando con el fin de linea
-    int id;
-
-    token = strtok(input, " ");
-    token = strtok(NULL, " ");
-
-    if (token == NULL)
-    {
-        for (i = jobs_number - 1; i >= 0; i--)
-        {
-            if (strcmp(jobs[i].state, "stopped") == 0)
-            {
-                n = jobs[i].childs;
-                for (i = 0; i < n; i++)
-                {
-                    if (kill(jobs[i].child_pids[i], SIGCONT) == -1)
-                    {
-                        fprintf(stderr, "Error al reanudar el proceso %d\n", i);
-                        return;
-                    }
-                }
-                strcpy(jobs[i].state, "running");
-                return;
-            }
-        }
-    }
-    else
-    {
-        id = atoi(token);
-        if (id >= jobs_number || id < 0)
-        {
-            fprintf(stderr, "Error en id del job \n");
-            return;
-        }
-
-        fprintf(stderr, "Id de job a reanudar: %d \n", id);
-        n = jobs[id].childs;
-        for (i = 0; i < n; i++)
-        {
-            if (kill(jobs[id].child_pids[i], SIGCONT) == -1)
-            {
-                fprintf(stderr, "Error al reanudar el proceso %d. %s\n", id, strerror(errno));
-                return;
-            }
-        }
-        strcpy(jobs[id].state, "reanudao");
-        show_jobs_list();
     }
 }
 
@@ -350,10 +293,68 @@ void review_bg()
     }
 }
 
+// ---------------------------------------------------------------------------------REANUDAR PROCESO (BG)
+void bg(char *input)
+{
+    int i = 0;
+    int j;
+    int n;
+    char *token; // para que solo quepan 3 como mucho contando con el fin de linea
+    int id;
+
+    token = strtok(input, " ");
+    token = strtok(NULL, " ");
+
+    if (token == NULL)
+    {
+        for (i = jobs_number - 1; i >= 0; i--)
+        {
+            if (strcmp(jobs[i].state, "stopped") == 0)
+            {
+                n = jobs[i].childs;
+                for (j = 0; j < n; j++)
+                {
+                    if (kill(jobs[i].child_pids[j], SIGCONT) == -1)
+                    {
+                        fprintf(stderr, "Error al reanudar el proceso %d. %s\n", i, strerror(errno));
+                        return;
+                    }
+                }
+                strcpy(jobs[i].state, "running");
+                return;
+            }
+        }
+    }
+    else
+    {
+        id = atoi(token);
+        if (id >= jobs_number || id < 0)
+        {
+            fprintf(stderr, "Error en id del job \n");
+            return;
+        }
+
+        fprintf(stderr, "Id de job a reanudar: %d \n", id);
+        n = jobs[id].childs;
+        for (i = 0; i < n; i++)
+        {
+            if (kill(jobs[id].child_pids[i], SIGCONT) == -1)
+            {
+                fprintf(stderr, "Error al reanudar el proceso %d. %s\n", id, strerror(errno));
+                return;
+            }
+        }
+        strcpy(jobs[id].state, "running");
+        show_jobs_list();
+    }
+}
+
 // ----------------------REDIRECCIONES----------------------
 // ---------------------------------------------------------------------------------REDIRECCIONAR ENTRADA
 void redirect_input_file(char *file)
 {
+    fprintf(stderr, "File: %s \n", file);
+
     int f = open(file, O_RDONLY);
     if (f == -1)
     {
@@ -432,7 +433,7 @@ void execute_commands(char input[1024])
     tline *line = tokenize(input);
     if (line == NULL)
     {
-        fprintf(stderr, "Error: Error de sintaxis.\n");
+        fprintf(stderr, "Error: Fallo al tokenizar la línea de comandos.\n");
         return;
     }
 
@@ -440,6 +441,11 @@ void execute_commands(char input[1024])
     int i;
     int num_childs = line->ncommands; // numero de hijos
     int valid_line = 0;
+
+    for (i = 0; i < N; i++)
+    {
+        fprintf(stderr, "%s \n", line->commands[i].filename);
+    }
 
     // hacemos la comprobación de que todos los comandos en la línea son validos en el momento que cambia a 1 valid_line salimos y volveriamos a mostrar el prompt
     i = 0;
@@ -484,7 +490,7 @@ void execute_commands(char input[1024])
         {
             if (line->background == 1)
             {
-                signal(SIGINT, SIG_IGN);
+                signal(SIGINT, SIG_IGN); // cuando el hijo recibe estas señales las trata diferentes al padre
                 signal(SIGTSTP, SIG_IGN);
             }
             else
@@ -515,6 +521,9 @@ void execute_commands(char input[1024])
                 redirect_pipes(N, i, pipes_vector);
             }
 
+            // fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
+            // fflush(stderr);
+
             execvp(line->commands[i].filename, line->commands[i].argv);
             // si imprime esto significa que el exec no se hizo bien
             fprintf(stderr, "No se ha encontrado el comando %s", line->commands[i].filename);
@@ -525,6 +534,7 @@ void execute_commands(char input[1024])
         {
 
             pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición en array global de pids
+            // fprintf(stderr, "Pid en posicion %d de pids vector es: %d \n", i, pids_vector[i]);
         }
     }
 
@@ -540,6 +550,8 @@ void execute_commands(char input[1024])
 
     if (line->background == 0) // si el comando se ejecuta en primer plano
     {
+        // fprintf(stderr, "Foreground, Esperando a los hijos\n");
+        // fflush(stdout);
         for (i = 0; i < N; i++)
         {
             if (waitpid(pids_vector[i], NULL, WUNTRACED) == -1)
@@ -555,6 +567,7 @@ void execute_commands(char input[1024])
         fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
     }
 
+    // Liberar memoria al final
     if (N > 1)
     {
         for (i = 0; i < N - 1; i++)
@@ -563,6 +576,7 @@ void execute_commands(char input[1024])
         }
         free(pipes_vector);
     }
+    free(pids_vector);
 }
 
 // ---------------------------------------------------------------------------------UMASK
@@ -623,6 +637,7 @@ void umask_function(char input[1024])
 void sigint_handler()
 {
     int i;
+    fprintf(stderr, "Estoy en ctrl c el valor de N es: %d", N);
 
     if (pids_vector != NULL)
     {
@@ -632,12 +647,18 @@ void sigint_handler()
             {
                 fprintf(stderr, "Error al enviar señal CTRL C al hijo \n");
             }
+            else
+            {
+                fprintf(stderr, "Señal CTRL C enviada correctamente \n");
+            }
         }
     }
     else
     {
         fprintf(stdout, "No hay ningún proceso que parar \n");
     }
+    fprintf(stdout, "\n%s", prompt);
+    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
@@ -647,43 +668,40 @@ void sigtstp_handler()
 {
     int i;
 
-    if (l == 1)
+    if (pids_vector != NULL)
     {
-        if (pids_vector != NULL)
+        for (i = 0; i < N; i++)
         {
-            for (i = 0; i < N; i++)
+            if (kill(pids_vector[i], SIGTSTP) != -1)
             {
-                if (tcgetpgrp(STDIN_FILENO) != getpgid(pids_vector[i]))
-                {
-                    add_job(pids_vector, input, N);
-                    fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
-                    show_jobs_list();
-                }
+                add_job(pids_vector, input, N);
+                strcpy(jobs[jobs_number - 1].state, "stopped");
+                fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
+                show_jobs_list();
             }
         }
-        else
-        {
-            fprintf(stdout, "No hay ningún proceso que parar \n");
-        }
+    }
+    else
+    {
+        fprintf(stdout, "No hay ningún proceso que parar \n");
     }
 
-    printf("\n%s", prompt);
-    fflush(stdout);
+    fprintf(stdout, "\n%s", prompt);
+    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
-// ----------------------MAIN----------------------
+// ----------------------FUNCION MAIN----------------------
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
 {
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
 
-    l = 0;
-
     printf("%s", prompt);
     fflush(stdout);
     while (fgets(input, sizeof(input), stdin) != NULL)
     {
+        N = 0;
         if (strcmp(input, "\n") == 0)
         {
             printf("Entrada vacía. Saliendo...\n");
@@ -691,38 +709,32 @@ int main()
         else if (strncmp(input, "cd", 2) == 0)
         {
             cd_function(input);
-            l = 1;
         }
         else if (strncmp(input, "exit", 4) == 0)
         {
             exit_shell();
-            l = 1;
         }
         else if (strncmp(input, "umask", 5) == 0)
         {
             umask_function(input);
-            l = 1;
         }
         else if (strncmp(input, "jobs", 4) == 0)
         {
             review_bg(); // para que me de tiempo a cambiarlo
             show_jobs_list();
-            l = 1;
         }
         else if (strncmp(input, "bg", 2) == 0)
         {
             bg(input);
-            l = 1;
         }
         else
         {
             execute_commands(input);
-            l = 1;
         }
 
         review_bg();
 
-        printf("\n%s", prompt);
+        printf("%s", prompt);
         fflush(stdout);
     }
 
