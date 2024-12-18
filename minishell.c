@@ -32,6 +32,7 @@ int *pids_vector; // puntero al vector de pids
 
 int N;
 char input[1024];
+int l;
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
 int *create_pids_vector(int N)
@@ -435,7 +436,7 @@ void execute_commands(char input[1024])
 
     N = line->ncommands;
     int i;
-    int num_childs = line->commands->argc; // numero de hijos
+    int num_childs = line->ncommands; // numero de hijos
     int valid_line = 0;
 
     // hacemos la comprobación de que todos los comandos en la línea son validos en el momento que cambia a 1 valid_line salimos y volveriamos a mostrar el prompt
@@ -479,8 +480,16 @@ void execute_commands(char input[1024])
         }
         else if (pid == 0) // si es el hijo
         {
-            signal(SIGINT, SIG_DFL); // cuando el hijo recibe estas señales las trata diferentes al padre
-            signal(SIGTSTP, SIG_DFL);
+            if (line->background == 1)
+            {
+                signal(SIGINT, SIG_IGN);
+                signal(SIGTSTP, SIG_IGN);
+            }
+            else
+            {
+                signal(SIGINT, SIG_DFL); // cuando el hijo recibe estas señales las trata diferentes al padre
+                signal(SIGTSTP, SIG_DFL);
+            }
 
             if ((i == 0) && (line->redirect_input != NULL))
             {
@@ -638,21 +647,24 @@ void sigtstp_handler()
 {
     int i;
 
-    if (pids_vector != NULL)
+    if (l == 1)
     {
-        for (i = 0; i < N; i++)
+        if (pids_vector != NULL)
         {
-            add_job(pids_vector, input, N);
-            strcpy(jobs[jobs_number - 1].state, "stopped");
-            if (kill(pids_vector[i], SIGTSTP) == -1)
+            for (i = 0; i < N; i++)
             {
-                fprintf(stderr, "Error al enviar señal CTRL Z al hijo \n");
+                add_job(pids_vector, input, N);
+                strcpy(jobs[jobs_number - 1].state, "stopped");
+                if (kill(pids_vector[i], SIGTSTP) == -1)
+                {
+                    fprintf(stderr, "Error al enviar señal CTRL Z al hijo \n");
+                }
             }
         }
-    }
-    else
-    {
-        fprintf(stdout, "No hay ningún proceso que parar \n");
+        else
+        {
+            fprintf(stdout, "No hay ningún proceso que parar \n");
+        }
     }
 
     fprintf(stdout, "\n \n");
@@ -666,6 +678,8 @@ int main()
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
 
+    l = 0;
+
     printf("%s", prompt);
     fflush(stdout);
     while (fgets(input, sizeof(input), stdin) != NULL)
@@ -677,27 +691,33 @@ int main()
         else if (strncmp(input, "cd", 2) == 0)
         {
             cd_function(input);
+            l = 1;
         }
         else if (strncmp(input, "exit", 4) == 0)
         {
             exit_shell();
+            l = 1;
         }
         else if (strncmp(input, "umask", 5) == 0)
         {
             umask_function(input);
+            l = 1;
         }
         else if (strncmp(input, "jobs", 4) == 0)
         {
             review_bg(); // para que me de tiempo a cambiarlo
             show_jobs_list();
+            l = 1;
         }
         else if (strncmp(input, "bg", 2) == 0)
         {
             bg(input);
+            l = 1;
         }
         else
         {
             execute_commands(input);
+            l = 1;
         }
 
         review_bg();
