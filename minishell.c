@@ -260,7 +260,7 @@ void execute_cd_command(char *rute)
 
     if (chdir(rute) == -1)
     {
-        fprintf(stdout, "No entra en el direcotorio:%s, %s \n", rute, strerror(errno));
+        fprintf(stdout, "No entra en el directorio:%s, %s \n", rute, strerror(errno));
     }
     else
     {
