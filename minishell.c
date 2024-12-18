@@ -32,112 +32,9 @@ int *pids_vector; // puntero al vector de pids
 int N;
 char input[1024];
 
-// ----------------------MANEJADORES DE SEÑALES----------------------
-// ---------------------------------------------------------------------------------MANEJADORES SEÑALES FOREGROUND
-// ---------------------------------------------------------------------------------CTRL C
-void sigint_handler()
-{
-    int i;
-    fprintf(stderr, "Estoy en ctrl c el valor de N es: %d", N);
 
-    if (pids_vector != NULL)
-    {
-        for (i = 0; i < N; i++)
-        {
-            if (kill(pids_vector[i], SIGINT) == -1)
-            {
-                fprintf(stderr, "Error al enviar señal CTRL C al hijo \n");
-            }
-        }
-    }
-    else
-    {
-        fprintf(stdout, "No hay ningún proceso que parar \n");
-    }
-}
 
-// ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
-// ---------------------------------------------------------------------------------CTRL Z
 
-void sigtstp_handler()
-{
-    int i;
-
-    if (pids_vector != NULL)
-    {
-        for (i = 0; i < N; i++)
-        {
-            add_job(pids_vector, input, N);
-            strcpy(jobs[jobs_number - 1].state, "stopped");
-            if (kill(pids_vector[i], SIGTSTP) == -1)
-            {
-                fprintf(stderr, "Error al enviar señal CTRL Z al hijo \n");
-            }
-        }
-    }
-    else
-    {
-        fprintf(stdout, "No hay ningún proceso que parar \n");
-    }
-
-    fprintf(stdout, "\n \n");
-    show_jobs_list();
-}
-
-// ---------------------------------------------------------------------------------REANUDAR PROCESO (BG)
-void bg(char *input)
-{
-    int i = 0;
-    int n;
-    char *token; // para que solo quepan 3 como mucho contando con el fin de linea
-    int id;
-
-    token = strtok(input, " ");
-    token = strtok(NULL, " ");
-
-    if (token == NULL)
-    {
-        for (i = jobs_number - 1; i >= 0; i--)
-        {
-            if (strcmp(jobs[i].state, "stopped") == 0)
-            {
-                n = jobs[i].childs;
-                for (i = 0; i < n; i++)
-                {
-                    if (kill(jobs[i].child_pids[i], SIGCONT) == -1)
-                    {
-                        fprintf(stderr, "Error al reanudar el proceso %d. %s\n", id, strerror(errno));
-                        return;
-                    }
-                }
-                strcpy(jobs[i].state, "running");
-                return;
-            }
-        }
-    }
-    else
-    {
-        id = atoi(token);
-        if (id >= jobs_number || id < 0)
-        {
-            fprintf(stderr, "Error en id del job \n");
-            return;
-        }
-
-        fprintf(stderr, "Id de job a reanudar: %d \n", id);
-        n = jobs[id].childs;
-        for (i = 0; i < n; i++)
-        {
-            if (kill(jobs[id].child_pids[i], SIGCONT) == -1)
-            {
-                fprintf(stderr, "Error al reanudar el proceso %d. %s\n", id, strerror(errno));
-                return;
-            }
-        }
-        strcpy(jobs[id].state, "reanudao");
-        show_jobs_list();
-    }
-}
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
 int *create_pids_vector(int N)
@@ -177,7 +74,7 @@ int **create_pipes_vector(int N)
         if (pipe(pipes_vector[i]) == -1)
         {
             perror("Error al crear la pipe");
-            return;
+            return NULL;
         }
     }
 
@@ -362,6 +259,62 @@ void show_jobs_list()
     }
 }
 
+// ---------------------------------------------------------------------------------REANUDAR PROCESO (BG)
+void bg(char *input)
+{
+    int i = 0;
+    int n;
+    char *token; // para que solo quepan 3 como mucho contando con el fin de linea
+    int id;
+
+    token = strtok(input, " ");
+    token = strtok(NULL, " ");
+
+    if (token == NULL)
+    {
+        for (i = jobs_number - 1; i >= 0; i--)
+        {
+            if (strcmp(jobs[i].state, "stopped") == 0)
+            {
+                n = jobs[i].childs;
+                for (i = 0; i < n; i++)
+                {
+                    if (kill(jobs[i].child_pids[i], SIGCONT) == -1)
+                    {
+                        fprintf(stderr, "Error al reanudar el proceso %d\n", i);
+                        return;
+                    }
+                }
+                strcpy(jobs[i].state, "running");
+                return;
+            }
+        }
+    }
+    else
+    {
+        id = atoi(token);
+        if (id >= jobs_number || id < 0)
+        {
+            fprintf(stderr, "Error en id del job \n");
+            return;
+        }
+
+        fprintf(stderr, "Id de job a reanudar: %d \n", id);
+        n = jobs[id].childs;
+        for (i = 0; i < n; i++)
+        {
+            if (kill(jobs[id].child_pids[i], SIGCONT) == -1)
+            {
+                fprintf(stderr, "Error al reanudar el proceso %d. %s\n", id, strerror(errno));
+                return;
+            }
+        }
+        strcpy(jobs[id].state, "reanudao");
+        show_jobs_list();
+    }
+}
+
+
 // ---------------------------------------------------------------------------------REVISAR JOBS
 void review_bg()
 {
@@ -387,7 +340,7 @@ void review_bg()
             if (!liberar)
             {
                 strcpy(jobs[i].state, "Done");
-                fflush; // tendriamos que ir a liberar la memoria del proceso
+                
             }
         }
     }
@@ -658,6 +611,59 @@ void umask_function(char input[1024])
     }
 }
 
+// ----------------------MANEJADORES DE SEÑALES----------------------
+// ---------------------------------------------------------------------------------MANEJADORES SEÑALES FOREGROUND
+// ---------------------------------------------------------------------------------CTRL C
+void sigint_handler()
+{
+    int i;
+    fprintf(stderr, "Estoy en ctrl c el valor de N es: %d", N);
+
+    if (pids_vector != NULL)
+    {
+        for (i = 0; i < N; i++)
+        {
+            if (kill(pids_vector[i], SIGINT) == -1)
+            {
+                fprintf(stderr, "Error al enviar señal CTRL C al hijo \n");
+            }
+        }
+    }
+    else
+    {
+        fprintf(stdout, "No hay ningún proceso que parar \n");
+    }
+}
+
+// ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
+// ---------------------------------------------------------------------------------CTRL Z
+
+void sigtstp_handler()
+{
+    int i;
+
+    if (pids_vector != NULL)
+    {
+        for (i = 0; i < N; i++)
+        {
+            add_job(pids_vector, input, N);
+            strcpy(jobs[jobs_number - 1].state, "stopped");
+            if (kill(pids_vector[i], SIGTSTP) == -1)
+            {
+                fprintf(stderr, "Error al enviar señal CTRL Z al hijo \n");
+            }
+        }
+    }
+    else
+    {
+        fprintf(stdout, "No hay ningún proceso que parar \n");
+    }
+
+    fprintf(stdout, "\n \n");
+    show_jobs_list();
+}
+
+
 // ----------------------FUNCION MAIN----------------------
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
@@ -702,8 +708,10 @@ int main()
         review_bg();
 
         printf("%s", prompt);
-        fflush;
+        fflush(stdout);
     }
 
     return 0;
 }
+
+
