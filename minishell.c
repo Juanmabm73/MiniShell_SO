@@ -511,9 +511,6 @@ void execute_commands(tline *line)
                 redirect_pipes(N, i, pipes_vector);
             }
 
-            // fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
-            // fflush(stderr);
-
             execvp(line->commands[i].filename, line->commands[i].argv);
             // si imprime esto significa que el exec no se hizo bien
             fprintf(stderr, "No se ha encontrado el comando %s", line->commands[i].filename);
@@ -524,7 +521,6 @@ void execute_commands(tline *line)
         {
 
             pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición en array global de pids
-            // fprintf(stderr, "Pid en posicion %d de pids vector es: %d \n", i, pids_vector[i]);
         }
     }
 
@@ -592,7 +588,7 @@ void umask_function(tline *line)
         char *endptr;
         new_mask = strtol(line->commands->argv[1], &endptr, 8); // Convertir el token a un número en base 8
 
-        if (*endptr != '\0')
+        if (*endptr != '\0' || new_mask < 0 || new_mask > 0777)
         {
             fprintf(stderr, "Error: La máscara proporcionada no es válida.\n");
             return;
@@ -667,6 +663,8 @@ void sigtstp_handler()
     fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
+// -------------------REDIRECCIONES-------------------
+// ---------------------------------------------------------------------------------REDIRECCIONES A FIC
 void redirections_to_file(tline *line)
 {
     if ((line->redirect_input != NULL))
