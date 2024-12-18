@@ -147,6 +147,7 @@ int *create_pids_vector(int N)
     if (!pids_vector)
     {
         fprintf(stderr, "Error al reservar memoria para los pids");
+        exit(1);
     }
 
     return pids_vector;
@@ -166,7 +167,7 @@ int **create_pipes_vector(int N)
         if (!pipes_vector[i])
         {
             fprintf(stderr, "Error al reservar memoria en las pipes");
-            return (NULL);
+            exit(1);
         }
     }
 
@@ -326,7 +327,7 @@ void add_job(pid_t *pids_vector, char *command, int num_childs)
     if (!jobs)
     {
         fprintf(stderr, "Error al reservar memoria para los jobs");
-        return;
+        exit(1);
     }
 
     // rellenamos el nuevo job
@@ -339,7 +340,7 @@ void add_job(pid_t *pids_vector, char *command, int num_childs)
     if (!jobs[jobs_number].child_pids)
     {
         fprintf(stderr, "Error al reservar memoria para los pids de los hijos");
-        return;
+        exit(1);
     }
 
     for (i = 0; i < num_childs; i++)
