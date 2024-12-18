@@ -201,6 +201,8 @@ void exit_shell()
 {
     printf("Saliendo de la minishell...\n");
     exit(0);
+    free(jobs);
+    free(pids_vector);
 }
 //----------------------JOBS----------------------
 // ---------------------------------------------------------------------------------AÑADIR JOB
@@ -316,7 +318,6 @@ void bg(tline *line)
             return;
         }
 
-        fprintf(stderr, "Id de job a reanudar: %d \n", id);
         n = jobs[id].childs;
         for (i = 0; i < n; i++)
         {
