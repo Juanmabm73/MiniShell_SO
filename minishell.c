@@ -27,9 +27,7 @@ int jobs_number = 0; // número de jobs en el array
 int child_number; // hacemos como en relevos y la i
 char prompt[1024] = "msh> ";
 
-pid_t pid;        // pid del proceso
 int *pids_vector; // puntero al vector de pids
-int **pipes_vector = NULL;
 
 int N;
 char input[1024];
@@ -184,7 +182,7 @@ int **create_pipes_vector(int N)
         if (!pipes_vector[i])
         {
             fprintf(stderr, "Error al reservar memoria en las pipes");
-            return(NULL);
+            return (NULL);
         }
     }
 
@@ -196,12 +194,8 @@ int **create_pipes_vector(int N)
             perror("Error al crear la pipe");
             return;
         }
-        // printf("Pipe %d creada correctamente \n", i);
-        // fflush(stdout);
     }
 
-    // printf("Pipes creadas con exito \n");
-    // fflush(stdout);
     return pipes_vector;
 }
 
@@ -213,8 +207,6 @@ void close_descriptors(int N, int i, int **pipes_vector)
     {
         if (j != i - 1)
         { // No cerrar el extremo de lectura de la pipe anterior
-            // printf("Cerrando pipe %d, extremo 0 \n", j);
-            // fflush(stdout);
             if (close(pipes_vector[j][0]) == -1)
             {
                 perror("Error al cerrar descriptor de lectura de pipe");
@@ -223,8 +215,6 @@ void close_descriptors(int N, int i, int **pipes_vector)
         }
         if (j != i)
         { // No cerrar el extremo de escritura de la pipe actual
-            // printf("Cerrando pipe %d, extremo 1 \n", j);
-            // fflush(stdout);
             if (close(pipes_vector[j][1]) == -1)
             {
                 perror("Error al cerrar descriptor de escritura de pipe");
@@ -239,8 +229,6 @@ void redirect_pipes(int N, int i, int **pipes_vector)
 {
     if (i == 0)
     {
-        // printf("Proceso hijo %d: Redirigiendo salida al pipe\n", i);
-        // fflush(stdout); // primer mandato
         if (dup2(pipes_vector[i][1], STDOUT_FILENO) == -1)
         { // redirigimos su salida al extremo de escritura [1] de la primera pipe
             perror("Error en dup2 (proceso 0)");
@@ -352,8 +340,8 @@ void exit_shell()
     printf("Saliendo de la minishell...\n");
     exit(0);
 }
-
-// ---------------------------------------------------------------------------------JOBS
+//----------------------JOBS----------------------
+// ---------------------------------------------------------------------------------AÑADIR JOB
 void add_job(pid_t *pids_vector, char *command, int num_childs)
 {
     int i;
@@ -387,6 +375,7 @@ void add_job(pid_t *pids_vector, char *command, int num_childs)
     jobs_number += 1;
 }
 
+// ---------------------------------------------------------------------------------MOSTRAR JOBS
 void show_jobs_list()
 {
     int i;
@@ -396,13 +385,13 @@ void show_jobs_list()
     }
 }
 
+// ---------------------------------------------------------------------------------REVISAR JOBS
 void review_bg()
 {
     int i;
     int liberar = 0; // si se queda en 0 han acabado todos
     int n = jobs_number;
     int j;
-    char status[1024];
     pid_t result;
 
     for (i = 0; i < n; i++)
@@ -411,8 +400,8 @@ void review_bg()
         {
 
             for (j = 0; j < jobs[i].childs; j++)
-            {                                                              // itera dentro del job la lista de pids
-                result = waitpid(jobs[i].child_pids[j], &status, WNOHANG); // esperamos pero no bloqueamos
+            {                                                           // itera dentro del job la lista de pids
+                result = waitpid(jobs[i].child_pids[j], NULL, WNOHANG); // esperamos pero no bloqueamos
                 if (result == 0)
                 {
                     liberar = 1;
@@ -427,6 +416,8 @@ void review_bg()
     }
 }
 
+// ----------------------REDIRECCIONES----------------------
+// ---------------------------------------------------------------------------------REDIRECCIONAR ENTRADA
 void redirect_input_file(char *file)
 {
     fprintf(stderr, "File: %s \n", file);
@@ -452,6 +443,7 @@ void redirect_input_file(char *file)
     close(f);
 }
 
+// ---------------------------------------------------------------------------------REDIRECCIONAR SALIDA
 void redirect_output_file(char *file)
 {
     int f = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -475,6 +467,7 @@ void redirect_output_file(char *file)
     close(f);
 }
 
+// ---------------------------------------------------------------------------------REDIRECCIONAR SALIDA DE ERROR
 void redirect_output_error_file(char *file)
 {
     int f = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -499,20 +492,25 @@ void redirect_output_error_file(char *file)
 }
 
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO/S
-void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
+void execute_commands(char input[1024])
 {
-    char status[1024];
+    pid_t pid;
+    int **pipes_vector = NULL;
+
     tline *line = tokenize(input);
-
-    // meter comprobacion del tokenize 
-
+    if (line == NULL)
+    {
+        fprintf(stderr, "Error: Fallo al tokenizar la línea de comandos.\n");
+        return;
+    }
 
     N = line->ncommands;
     int i;
     int num_childs = line->commands->argc; // numero de hijos
     int valid_line = 0;
 
-    for (i=0; i < N; i++){
+    for (i = 0; i < N; i++)
+    {
         fprintf(stderr, "%s \n", line->commands[i].filename);
     }
 
@@ -629,7 +627,6 @@ void execute_commands(char input[1024], pid_t pid, int **pipes_vector)
     }
 
     // Liberar memoria al final
-    // DUDA TRATO ESPECIAL PARA MEMORIA EN BACKGROUND ??????????????????????????????? TRAS LA FINALIZACIÓN DE LOS HIJOS
     if (N > 1)
     {
         for (i = 0; i < N - 1; i++)
@@ -668,8 +665,6 @@ void umask_function(char input[1024])
                 umask(current_mask);            // Restauramos la máscara anterior
                 printf("%04o\n", current_mask);
                 fflush(stdout);
-                printf("%04o\n", current_mask);
-                fflush(stdout);
             }
             else
             {
@@ -694,11 +689,10 @@ void umask_function(char input[1024])
     }
 }
 
-//----------------------FUNCION MAIN----------------------
+// ----------------------FUNCION MAIN----------------------
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
 {
-
     signal(SIGINT, sigint_handler);
     signal(SIGTSTP, sigtstp_handler);
 
@@ -733,7 +727,7 @@ int main()
         }
         else
         {
-            execute_commands(input, pid, pipes_vector);
+            execute_commands(input);
         }
 
         review_bg();
