@@ -216,6 +216,7 @@ void exit_shell()
         free(jobs[i].child_pids);
     }
     free(jobs);
+    free(pids_vector);
     exit(0);
 }
 //----------------------JOBS----------------------
@@ -233,6 +234,7 @@ void add_job(pid_t *pids_vector, char *command, int num_childs)
 
     // rellenamos el nuevo job
     jobs[jobs_number].pid = pids_vector[0];
+    printf("PID: %d, asignado por pid %d\n", jobs[jobs_number].pid, pids_vector[0]);
     jobs[jobs_number].job_id = jobs_number;
     strcpy(jobs[jobs_number].state, "running");                                     // Estado inicial
     strncpy(jobs[jobs_number].command, command, sizeof(jobs[jobs_number].command)); // Comando ejecutado
@@ -553,7 +555,6 @@ void execute_commands(char input[1024])
         fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
     }
 
-    // Liberar memoria al final
     if (N > 1)
     {
         for (i = 0; i < N - 1; i++)
@@ -562,7 +563,6 @@ void execute_commands(char input[1024])
         }
         free(pipes_vector);
     }
-    free(pids_vector);
 }
 
 // ---------------------------------------------------------------------------------UMASK
@@ -653,11 +653,11 @@ void sigtstp_handler()
         {
             for (i = 0; i < N; i++)
             {
-                add_job(pids_vector, input, N);
-                strcpy(jobs[jobs_number - 1].state, "stopped");
-                if (kill(pids_vector[i], SIGTSTP) == -1)
+                if (tcgetpgrp(STDIN_FILENO) != getpgid(pids_vector[i]))
                 {
-                    fprintf(stderr, "Error al enviar señal CTRL Z al hijo \n");
+                    add_job(pids_vector, input, N);
+                    fprintf(stderr, "[%d] %d\n", jobs[jobs_number - 1].job_id, jobs[jobs_number - 1].pid);
+                    show_jobs_list();
                 }
             }
         }
@@ -667,11 +667,11 @@ void sigtstp_handler()
         }
     }
 
-    fprintf(stdout, "\n \n");
-    show_jobs_list();
+    printf("\n%s", prompt);
+    fflush(stdout);
 }
 
-// ----------------------FUNCION MAIN----------------------
+// ----------------------MAIN----------------------
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
 int main()
 {
@@ -722,7 +722,7 @@ int main()
 
         review_bg();
 
-        printf("%s", prompt);
+        printf("\n%s", prompt);
         fflush(stdout);
     }
 
