@@ -187,14 +187,16 @@ void cd_function(tline *line)
 {
     fprintf(stderr, "%d \n", line->commands->argc);
     // Verificamos el número de tokens obtenidos
-    if (line->commands->argc == 1)                      // en caso de que no haya nada  
+    if (line->commands->argc == 1) // en caso de que no haya nada
     {
-            execute_cd_command(NULL);
+        execute_cd_command(NULL);
     }
-    else if (line->commands->argc == 2)                 // en caso de que haya una ruta
+    else if (line->commands->argc == 2) // en caso de que haya una ruta
     {
         execute_cd_command(line->commands->argv[1]);
-    }else {
+    }
+    else
+    {
         fprintf(stderr, "Error en el numero de argumentos \n");
         return;
     }
@@ -287,10 +289,8 @@ void bg(tline *line)
     int i = 0;
     int j;
     int n;
-    
-    int id;
 
-    
+    int id;
 
     if (line->commands->argc == 1)
     {
@@ -333,9 +333,10 @@ void bg(tline *line)
         }
         strcpy(jobs[id].state, "running");
         show_jobs_list();
-    } else {
-        fprintf(stderr, "Error en el numero de argumentos \n" );
-
+    }
+    else
+    {
+        fprintf(stderr, "Error en el numero de argumentos \n");
     }
 }
 
@@ -420,7 +421,6 @@ void execute_commands(tline *line)
     pid_t pid;
     int **pipes_vector = NULL;
 
-    
     if (line == NULL)
     {
         fprintf(stderr, "Error: Fallo al tokenizar la línea de comandos.\n");
@@ -572,7 +572,6 @@ void execute_commands(tline *line)
 // ---------------------------------------------------------------------------------UMASK
 void umask_function(tline *line)
 {
-    
 
     mode_t new_mask; // almacena la nueva máscara de permisos
 
@@ -585,9 +584,11 @@ void umask_function(tline *line)
         umask(current_mask);            // Restauramos la máscara anterior
         printf("%04o\n", current_mask);
         fflush(stdout);
-    } else if (line->commands->argc == 2){
+    }
+    else if (line->commands->argc == 2)
+    {
 
-            // Verificar si el token es una máscara válida
+        // Verificar si el token es una máscara válida
         char *endptr;
         new_mask = strtol(line->commands->argv[1], &endptr, 8); // Convertir el token a un número en base 8
 
@@ -599,8 +600,8 @@ void umask_function(tline *line)
 
         // Aplicar la nueva máscara
         umask(new_mask);
-            
-    } else
+    }
+    else
     {
         fprintf(stderr, "Error en el numero de comandos\n");
         return;
@@ -666,8 +667,8 @@ void sigtstp_handler()
     fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
-
-void redirections_to_file(tline *line){
+void redirections_to_file(tline *line)
+{
     if ((line->redirect_input != NULL))
     {
         redirect_input_file(line->redirect_input);
@@ -682,8 +683,20 @@ void redirections_to_file(tline *line){
     }
 }
 
-void redirections_to_standar() {
-    //hashjhas
+void redirections_to_standar()
+{
+    if (dup2(STDIN_FILENO, 0) == -1)
+    {
+        perror("Error al restaurar la entrada estándar");
+    }
+    if (dup2(STDOUT_FILENO, 1) == -1)
+    {
+        perror("Error al restaurar la salida estándar");
+    }
+    if (dup2(STDERR_FILENO, 2) == -1)
+    {
+        perror("Error al restaurar la salida de error estándar");
+    }
 }
 
 // ----------------------FUNCION MAIN----------------------
@@ -702,7 +715,7 @@ int main()
         strcpy(input_cpy, input);
         line = tokenize(input);
         N = 0;
-        
+
         redirections_to_file(line);
 
         if (strcmp(input_cpy, "\n") == 0)
@@ -737,7 +750,7 @@ int main()
 
         review_bg();
 
-        // redirections_to_standar();
+        redirections_to_standar();
 
         printf("%s", prompt);
         fflush(stdout);
