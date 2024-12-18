@@ -90,10 +90,6 @@ void sigtstp_handler()
         fprintf(stdout, "No hay ningún proceso que parar \n");
     }
 
-    // for (i = 0; i < jobs_number; i++)
-    // {
-    //     fprintf(stdout, "%s\n", jobs[i].command);
-    // }
     show_jobs_list();
 
     fprintf(stdout, "\n%s", prompt);
@@ -238,8 +234,6 @@ void redirect_pipes(int N, int i, int **pipes_vector)
     }
     else if (i == N - 1)
     { // ultimo mandato
-        // printf("Proceso hijo %d: Redirigiendo entrada del pipe\n", i);
-        // fflush(stdout);
         if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1)
         {
             perror("Error en dup2 (último mandato)");
@@ -248,8 +242,6 @@ void redirect_pipes(int N, int i, int **pipes_vector)
     }
     else
     { // mandato intermedio
-        // printf("Proceso hijo %d: Redirigiendo entrada y salida del pipe\n", i);
-        // fflush(stdout);
         if (dup2(pipes_vector[i - 1][0], STDIN_FILENO) == -1)
         {
             perror("Error en dup2 (mandato intermedio, entrada)");
@@ -580,9 +572,6 @@ void execute_commands(char input[1024])
                 redirect_pipes(N, i, pipes_vector);
             }
 
-            // fprintf(stderr, "Todo cerrado y redireccionado con exito vamos con el exec de: %s \n", line->commands[i].filename);
-            // fflush(stderr);
-
             execvp(line->commands[i].filename, line->commands[i].argv);
             // si imprime esto significa que el exec no se hizo bien
             fprintf(stderr, "No se ha encontrado el comando %s", line->commands[i].filename);
@@ -593,7 +582,6 @@ void execute_commands(char input[1024])
         {
 
             pids_vector[i] = pid; // nos guardamos el pid del hijo en su posición en array global de pids
-            // fprintf(stderr, "Pid en posicion %d de pids vector es: %d \n", i, pids_vector[i]);
         }
     }
 
@@ -609,8 +597,6 @@ void execute_commands(char input[1024])
 
     if (line->background == 0) // si el comando se ejecuta en primer plano
     {
-        // fprintf(stderr, "Foreground, Esperando a los hijos\n");
-        // fflush(stdout);
         for (i = 0; i < N; i++)
         {
             if (waitpid(pids_vector[i], NULL, WUNTRACED) == -1)
