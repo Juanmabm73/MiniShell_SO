@@ -201,8 +201,6 @@ void exit_shell()
 {
     printf("Saliendo de la minishell...\n");
     exit(0);
-    free(jobs);
-    free(pids_vector);
 }
 //----------------------JOBS----------------------
 // ---------------------------------------------------------------------------------AÑADIR JOB
@@ -581,9 +579,8 @@ void sigint_handler()
 {
     int i;
 
-    if (pids_vector != NULL && jobs[jobs_number - 1].stopped == 0)
+    if (pids_vector != NULL)
     {
-        fprintf(stderr, " sttoped: %d \n", jobs[jobs_number - 1].stopped);
         for (i = 0; i < N; i++)
         {
             if (kill(pids_vector[i], SIGINT) == -1)
@@ -596,8 +593,7 @@ void sigint_handler()
     {
         fprintf(stdout, "No hay ningún proceso que parar \n");
     }
-    fprintf(stdout, "\n%s", prompt);
-    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
+    printf("\n");
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
@@ -625,9 +621,6 @@ void sigtstp_handler()
     {
         fprintf(stdout, "No hay ningún proceso que parar \n");
     }
-
-    fprintf(stdout, "\n%s", prompt);
-    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
 // -------------------REDIRECCIONES-------------------
