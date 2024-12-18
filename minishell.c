@@ -48,18 +48,12 @@ void sigint_handler()
             {
                 fprintf(stderr, "Error al enviar señal CTRL C al hijo \n");
             }
-            else
-            {
-                fprintf(stderr, "Señal CTRL C enviada correctamente \n");
-            }
         }
     }
     else
     {
         fprintf(stdout, "No hay ningún proceso que parar \n");
     }
-    fprintf(stdout, "\n%s", prompt);
-    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
 // ---------------------------------------------------------------------------------MANEJADOR SEÑAL SIGTSTP
@@ -79,10 +73,6 @@ void sigtstp_handler()
             {
                 fprintf(stderr, "Error al enviar señal CTRL Z al hijo \n");
             }
-            else
-            {
-                fprintf(stderr, "Señal CTRL Z enviada correctamente \n");
-            }
         }
     }
     else
@@ -90,10 +80,8 @@ void sigtstp_handler()
         fprintf(stdout, "No hay ningún proceso que parar \n");
     }
 
+    fprintf(stdout, "\n \n");
     show_jobs_list();
-
-    fprintf(stdout, "\n%s", prompt);
-    fflush(stdout); // Asegúrate de que el prompt se imprima inmediatamente
 }
 
 // ---------------------------------------------------------------------------------REANUDAR PROCESO (BG)
@@ -258,8 +246,6 @@ void redirect_pipes(int N, int i, int **pipes_vector)
 // ---------------------------------------------------------------------------------EJECUTAR COMANDO CD
 void execute_cd_command(char *rute)
 {
-
-    printf("La ruta que llega a cd es: %s \n", rute);
     fflush(stdout);
 
     if (rute == NULL)
@@ -277,11 +263,9 @@ void execute_cd_command(char *rute)
     }
     else
     {
-        printf("Se ha podido redirigir al directorio \n");
         char cwd[1024];
         if (getcwd(cwd, sizeof(cwd)) != NULL)
         {
-            printf("El directorio actual es: %s \n", cwd);
             if (setenv("PWD", cwd, 1) == -1)
             {
                 perror("Error al actualizar la variable de entorno PWD");
@@ -412,8 +396,6 @@ void review_bg()
 // ---------------------------------------------------------------------------------REDIRECCIONAR ENTRADA
 void redirect_input_file(char *file)
 {
-    fprintf(stderr, "File: %s \n", file);
-
     int f = open(file, O_RDONLY);
     if (f == -1)
     {
