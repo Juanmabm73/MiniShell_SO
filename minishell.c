@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 #define MAX_COMMANDS 20
 
@@ -31,10 +32,6 @@ int *pids_vector; // puntero al vector de pids
 
 int N;
 char input[1024];
-
-
-
-
 
 // ---------------------------------------------------------------------------------CREAR ARRAY DE PIDS
 int *create_pids_vector(int N)
@@ -168,7 +165,7 @@ void execute_cd_command(char *rute)
             {
                 perror("Error al actualizar la variable de entorno PWD");
             }; // actualizamos el valor de PWD
-            snprintf(prompt, sizeof(prompt), "msh:%s > ", cwd);
+            snprintf(prompt, sizeof(prompt), "msh:%.1016s > ", cwd); // limita el tamaño de cwd a 1016
         }
         else
         {
@@ -212,6 +209,12 @@ void cd_function(char input[1024])
 void exit_shell()
 {
     printf("Saliendo de la minishell...\n");
+
+    for (int i = 0; i < jobs_number; i++)
+    {
+        free(jobs[i].child_pids);
+    }
+    free(jobs);
     exit(0);
 }
 //----------------------JOBS----------------------
@@ -314,7 +317,6 @@ void bg(char *input)
     }
 }
 
-
 // ---------------------------------------------------------------------------------REVISAR JOBS
 void review_bg()
 {
@@ -340,7 +342,6 @@ void review_bg()
             if (!liberar)
             {
                 strcpy(jobs[i].state, "Done");
-                
             }
         }
     }
@@ -428,7 +429,7 @@ void execute_commands(char input[1024])
     tline *line = tokenize(input);
     if (line == NULL)
     {
-        fprintf(stderr, "Error: Fallo al tokenizar la línea de comandos.\n");
+        fprintf(stderr, "Error: Error de sintaxis.\n");
         return;
     }
 
@@ -436,11 +437,6 @@ void execute_commands(char input[1024])
     int i;
     int num_childs = line->commands->argc; // numero de hijos
     int valid_line = 0;
-
-    for (i = 0; i < N; i++)
-    {
-        fprintf(stderr, "%s \n", line->commands[i].filename);
-    }
 
     // hacemos la comprobación de que todos los comandos en la línea son validos en el momento que cambia a 1 valid_line salimos y volveriamos a mostrar el prompt
     i = 0;
@@ -590,17 +586,18 @@ void umask_function(char input[1024])
             }
             else
             {
-                // Convertir el modo de cadena a número
-                new_mask = strtol(token, NULL, 8);    // convertimos la nueva máscara a octal
-                if (new_mask == 0 && errno == EINVAL) // si hay error en la conversión
+                // Verificar si el token es una máscara válida
+                char *endptr;
+                new_mask = strtol(token, &endptr, 8); // Convertir el token a un número en base 8
+
+                if (*endptr != '\0')
                 {
-                    perror("Error al convertir el modo");
+                    fprintf(stderr, "Error: La máscara proporcionada no es válida.\n");
+                    return;
                 }
-                else
-                {
-                    umask(new_mask);                                       // nueva máscara de permisos
-                    printf("Nueva máscara establecida: %04o\n", new_mask); // Imprimimos la nueva máscara en formato octal
-                }
+
+                // Aplicar la nueva máscara
+                umask(new_mask);
             }
         }
     }
@@ -617,7 +614,6 @@ void umask_function(char input[1024])
 void sigint_handler()
 {
     int i;
-    fprintf(stderr, "Estoy en ctrl c el valor de N es: %d", N);
 
     if (pids_vector != NULL)
     {
@@ -662,7 +658,6 @@ void sigtstp_handler()
     fprintf(stdout, "\n \n");
     show_jobs_list();
 }
-
 
 // ----------------------FUNCION MAIN----------------------
 // ---------------------------------------------------------------------------------FUNCIÓN MAIN
@@ -713,5 +708,3 @@ int main()
 
     return 0;
 }
-
-
